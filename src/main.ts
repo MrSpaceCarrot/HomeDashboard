@@ -1,10 +1,48 @@
-import { app, BrowserWindow } from 'electron';
+import fs from "fs";
+import { app, BrowserWindow, utilityProcess, MessageChannelMain } from 'electron';
 import path from 'node:path';
 import started from 'electron-squirrel-startup';
+import { getDatabasePath } from './database/databasepath';
+import ingestPath from './database/worker/ingest?modulePath'
 
 // Handle creating/removing shortcuts on Windows when installing/uninstalling.
 if (started) {
   app.quit();
+}
+
+const initializeApp = () => {
+  const dbPath = getDatabasePath()
+  console.log(dbPath)
+  
+  const { port1, port2 } = new MessageChannelMain()
+  const worker = utilityProcess.fork(ingestPath)
+  
+  /*
+  const worker = utilityProcess.fork(
+    path.join(__dirname, "ingest", "ingest.js")
+  );
+  console.log(fs.existsSync(
+    path.join(__dirname, "ingest", "ingest.js")
+  ))
+  */
+
+  port2.postMessage({action: "start", dbPath}, [port1]);
+  /*
+  port2.on("spawn", () => {
+    console.log("Worker spawned");
+  });
+  port2.on("exit", (code) => {
+    console.log("Worker exited", code);
+  });
+  port2.on("error", (err) => {
+    console.error("Worker error", err);
+  });
+  */
+  port2.on("message", (msg) => {
+    console.log("Worker message", msg);
+  });
+
+  createWindow()
 }
 
 const createWindow = () => {
@@ -14,7 +52,10 @@ const createWindow = () => {
     height: 600,
     webPreferences: {
       preload: path.join(__dirname, 'preload.js'),
+      devTools: true
     },
+    frame: true,
+    icon: "src/images/icon.png"
   });
 
   // and load the index.html of the app.
@@ -33,7 +74,7 @@ const createWindow = () => {
 // This method will be called when Electron has finished
 // initialization and is ready to create browser windows.
 // Some APIs can only be used after this event occurs.
-app.on('ready', createWindow);
+app.on('ready', initializeApp);
 
 // Quit when all windows are closed, except on macOS. There, it's common
 // for applications and their menu bar to stay active until the user quits

@@ -16,7 +16,14 @@ const config: ForgeConfig = {
     new MakerSquirrel({}),
     new MakerZIP({}, ['darwin']),
     new MakerRpm({}),
-    new MakerDeb({}),
+    {
+      name: '@electron-forge/maker-deb',
+        config: {
+          options: {
+            icon: 'src/images/icon.png'
+          }
+      }
+    },
   ],
   plugins: [
     new VitePlugin({
@@ -41,6 +48,7 @@ const config: ForgeConfig = {
           config: 'vite.renderer.config.mjs',
         },
       ],
+      
     }),
     // Fuses are used to enable/disable various Electron functionality
     // at package time, before code signing the application

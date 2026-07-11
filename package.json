@@ -10,7 +10,8 @@
     "package": "electron-forge package",
     "make": "electron-forge make",
     "publish": "electron-forge publish",
-    "lint": "eslint --ext .ts,.tsx ."
+    "lint": "eslint --ext .ts,.tsx .",
+    "build:ingest": "tsc -p ingest-tsconfig.json"
   },
   "keywords": [],
   "author": {
@@ -28,22 +29,30 @@
     "@electron-forge/plugin-fuses": "^7.11.2",
     "@electron-forge/plugin-vite": "^7.11.2",
     "@electron/fuses": "^1.8.0",
+    "@types/better-sqlite3": "^7.6.13",
     "@types/electron-squirrel-startup": "^1.0.2",
-    "@typescript-eslint/eslint-plugin": "^5.62.0",
-    "@typescript-eslint/parser": "^5.62.0",
+    "@types/unzipper": "^0.10.11",
+    "@typescript-eslint/eslint-plugin": "^8.62.1",
+    "@typescript-eslint/parser": "^8.62.1",
     "@vitejs/plugin-vue": "^6.0.7",
     "autoprefixer": "^10.5.2",
     "electron": "43.0.0",
     "eslint": "^8.57.1",
     "eslint-plugin-import": "^2.32.0",
     "postcss": "^8.5.16",
-    "typescript": "~4.5.4",
+    "typescript": "^6.0.3",
     "vite": "^5.4.21"
   },
   "dependencies": {
     "@tailwindcss/vite": "^4.3.2",
+    "better-sqlite3": "^12.11.1",
     "electron-squirrel-startup": "^1.0.1",
+    "fast-csv": "^5.0.7",
+    "pg-hstore": "^2.3.4",
+    "sequelize": "^6.37.8",
+    "sqlite3": "^6.0.1",
     "tailwindcss": "^4.3.2",
+    "unzipper": "^0.12.5",
     "vue": "^3.5.39",
     "vue-router": "^4.6.4"
   },
