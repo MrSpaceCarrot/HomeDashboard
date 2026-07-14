@@ -7,13 +7,12 @@ import { getDatabasePath } from './database/path'
 
 function initializeApp(): void {
   const dbPath = getDatabasePath()
-
   const { port1, port2 } = new MessageChannelMain()
   const worker = utilityProcess.fork(ingestPath)
   worker.postMessage({ message: 'start', dbPath: dbPath }, [port1])
 
   port2.on('message', (e) => {
-    console.log(`Message from child: ${e.data}`)
+    console.log(`GTFS Ingest: ${e.data}`)
   })
   port2.start()
 

@@ -1,6 +1,7 @@
 // Imports
 import fs from 'fs'
-import yauzl from 'yauzl'
+//import yauzl from 'yauzl'
+import AdmZip from 'adm-zip'
 import csv from 'fast-csv'
 import Database from 'better-sqlite3'
 import * as https from 'https'
@@ -54,57 +55,53 @@ function ingestFile(db: DB, filePath: string, tableName: string): Promise<void> 
 // Ingest all files into db
 async function ingestGTFS(db: DB): Promise<boolean> {
   // Create file
-  const file = fs.createWriteStream('gtfs.zip')
+  const zipFile = fs.createWriteStream('gtfs.zip')
 
   // Download gtfs zip file
+  process.parentPort?.postMessage('Downloading GTFS')
   https.get('https://gtfs.at.govt.nz/gtfs.zip', (response) => {
-    response.pipe(file)
-    file.on('finish', () => {
-      file.close(() => {
-        console.log('Download finished')
-        // Ingest data
-        /*
-        yauzl.open('gtfs.zip', { lazyEntries: true }, (_error, zip) => {
-          zip.readEntry()
+    response.pipe(zipFile)
+    zipFile.on('finish', () => {
+      zipFile.close(() => {
+        process.parentPort?.postMessage('Download finished')
 
-          zip.on('entry', async (entry) => {
-            if (!entry.fileName.endsWith('.csv')) {
-              zip.readEntry()
-              return
-            }
-
-            const tableName = entry.path.replace(/\.csv$/i, '').replace(/[^\w]/g, '_')
-            console.log(db, entry.path, tableName)
-            ingestFile(db, entry.path, tableName)
-
-            zip.readEntry()
+        // Extract file
+        const zip = new AdmZip('gtfs.zip')
+        zip.extractAllTo('./gtfs', true)
+        fs.readdir('./gtfs', (_error, files) => {
+          files.forEach((file) => {
+            const tableName = file.replace(/\.txt$/i, '')
+            process.parentPort?.postMessage(`Ingesting file ${file} with name ${tableName}`)
+            ingestFile(db, `./gtfs/${file}`, tableName)
           })
         })
-        */
+
+        return true
       })
     })
   })
-  return true
+  return false
 }
 
 // Main worker logic
 process.parentPort?.on('message', async (e) => {
+  // Get connection to main
   const [port] = e.ports
   port.start()
 
+  // When start signal is sent, delete old db and make new one
   if (e.data.message !== 'start') return
+  fs.unlinkSync(e.data.dbPath)
+  const db = new Database(e.data.dbPath)
 
-  const db = new Database(e.data.message.dbPath)
-
+  // Ingest GTFS
   try {
     ingestGTFS(db)
-    process.parentPort?.postMessage({ result: 'Finished' })
+    process.parentPort?.postMessage('Finished')
   } catch (err) {
     process.parentPort?.postMessage({
       type: 'error',
       error: err instanceof Error ? err.message : String(err)
     })
-  } finally {
-    db.close()
   }
 })
