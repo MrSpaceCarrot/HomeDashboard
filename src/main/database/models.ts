@@ -1,12 +1,22 @@
 import { sequelizeConnection } from './connection'
-import { DataTypes } from 'sequelize'
+import { DataTypes, Model, InferAttributes, InferCreationAttributes, ForeignKey } from 'sequelize'
 
 const sequelize = sequelizeConnection
 
 // Models
 // Agency
-const Agency = sequelize.define(
-  'Agency',
+export class Agency extends Model<InferAttributes<Agency>, InferCreationAttributes<Agency>> {
+  declare agency_id: string
+  declare agency_name: string
+  declare agency_url: string
+  declare agency_timezone: string
+  declare agency_lang: string | null
+  declare agency_phone: string | null
+  declare agency_fare_url: string | null
+  declare agency_email: string | null
+}
+
+Agency.init(
   {
     agency_id: { type: DataTypes.STRING, allowNull: false, primaryKey: true },
     agency_name: { type: DataTypes.STRING, allowNull: false },
@@ -17,12 +27,29 @@ const Agency = sequelize.define(
     agency_fare_url: { type: DataTypes.STRING },
     agency_email: { type: DataTypes.STRING }
   },
-  { tableName: 'agency' }
+  {
+    sequelize,
+    modelName: 'Agency',
+    tableName: 'agency',
+    timestamps: false
+  }
 )
 
 // Calendar
-const Calendar = sequelize.define(
-  'Calendar',
+export class Calendar extends Model<InferAttributes<Calendar>, InferCreationAttributes<Calendar>> {
+  declare service_id: string
+  declare monday: number | null
+  declare tuesday: number | null
+  declare wednesday: number | null
+  declare thursday: number | null
+  declare friday: number | null
+  declare saturday: number | null
+  declare sunday: number | null
+  declare start_date: number | null
+  declare end_date: number | null
+}
+
+Calendar.init(
   {
     service_id: { type: DataTypes.STRING, allowNull: false, primaryKey: true },
     monday: { type: DataTypes.NUMBER },
@@ -35,12 +62,25 @@ const Calendar = sequelize.define(
     start_date: { type: DataTypes.NUMBER },
     end_date: { type: DataTypes.NUMBER }
   },
-  { tableName: 'calendar' }
+  {
+    sequelize,
+    modelName: 'Calendar',
+    tableName: 'calendar',
+    timestamps: false
+  }
 )
 
 // CalendarDate
-const CalendarDate = sequelize.define(
-  'CalendarDate',
+export class CalendarDate extends Model<
+  InferAttributes<CalendarDate>,
+  InferCreationAttributes<CalendarDate>
+> {
+  declare service_id: ForeignKey<Calendar['service_id']>
+  declare date: string
+  declare exception_type: number
+}
+
+CalendarDate.init(
   {
     service_id: {
       type: DataTypes.STRING,
@@ -51,15 +91,37 @@ const CalendarDate = sequelize.define(
     date: { type: DataTypes.STRING, allowNull: false, primaryKey: true },
     exception_type: { type: DataTypes.NUMBER, allowNull: false }
   },
-  { tableName: 'calendar_dates' }
+  {
+    sequelize,
+    modelName: 'CalendarDate',
+    tableName: 'calendar_dates',
+    timestamps: false
+  }
 )
 
 CalendarDate.belongsTo(Calendar, { as: 'calendar', foreignKey: 'calendar_service_id' })
 Calendar.hasMany(CalendarDate, { as: 'calendarDates', foreignKey: 'calendar_service_id' })
 
 // Stop
-const Stop = sequelize.define(
-  'Stop',
+export class Stop extends Model<InferAttributes<Stop>, InferCreationAttributes<Stop>> {
+  declare stop_id: string
+  declare stop_code: string | null
+  declare stop_name: string | null
+  declare stop_desc: string | null
+  declare stop_lat: number | null
+  declare stop_lon: number | null
+  declare zone_id: string | null
+  declare stop_url: string | null
+  declare location_type: number | null
+  declare parent_station: string | null
+  declare stop_timezone: string | null
+  declare platform_code: string | null
+  declare wheelchair_boarding: number | null
+  declare start_date: string | null
+  declare end_date: string | null
+}
+
+Stop.init(
   {
     stop_id: { type: DataTypes.STRING, allowNull: false, primaryKey: true },
     stop_code: { type: DataTypes.STRING },
@@ -75,23 +137,45 @@ const Stop = sequelize.define(
     platform_code: { type: DataTypes.STRING },
     wheelchair_boarding: { type: DataTypes.NUMBER },
     start_date: { type: DataTypes.STRING },
-    end_date: { type: DataTypes.STRING },
+    end_date: { type: DataTypes.STRING }
 
+    /*
     parent_stop_id: {
       type: DataTypes.STRING,
       allowNull: true,
       references: { model: 'stops', key: 'stop_id' }
     }
+    */
   },
-  { tableName: 'stops' }
+  {
+    sequelize,
+    modelName: 'Stop',
+    tableName: 'stops',
+    timestamps: false
+  }
 )
 
+/*
 Stop.belongsTo(Stop, { as: 'parent', foreignKey: 'parent_stop_id', targetKey: 'stop_id' })
 Stop.hasMany(Stop, { as: 'childStops', foreignKey: 'parent_stop_id', sourceKey: 'stop_id' })
+*/
 
 // Route
-const Route = sequelize.define(
-  'Route',
+export class Route extends Model<InferAttributes<Route>, InferCreationAttributes<Route>> {
+  declare route_id: string
+  declare agency_id: ForeignKey<Agency['agency_id']>
+  declare route_short_name: string
+  declare route_long_name: string
+  declare route_desc: string | null
+  declare route_type: number | null
+  declare route_url: string | null
+  declare route_color: string | null
+  declare route_text_color: string | null
+  declare route_sort_order: number | null
+  declare contract_id: string | null
+}
+
+Route.init(
   {
     route_id: { type: DataTypes.STRING, allowNull: false, primaryKey: true },
     agency_id: {
@@ -109,15 +193,32 @@ const Route = sequelize.define(
     route_sort_order: { type: DataTypes.NUMBER },
     contract_id: { type: DataTypes.STRING }
   },
-  { tableName: 'routes' }
+  {
+    sequelize,
+    modelName: 'Route',
+    tableName: 'routes',
+    timestamps: false
+  }
 )
 
 Route.belongsTo(Agency, { as: 'agency', foreignKey: 'agency_agency_id' })
 Agency.hasMany(Route, { as: 'routes', foreignKey: 'agency_agency_id' })
 
 // Trip
-const Trip = sequelize.define(
-  'Trip',
+export class Trip extends Model<InferAttributes<Trip>, InferCreationAttributes<Trip>> {
+  declare route_id: ForeignKey<Route['route_id']>
+  declare service_id: ForeignKey<Calendar['service_id']>
+  declare trip_id: string
+  declare trip_headsign: string
+  declare trip_short_name: string | null
+  declare direction_id: number | null
+  declare block_id: string | null
+  declare shape_id: string | null
+  declare wheelchair_accessible: number | null
+  declare bikes_allowed: number | null
+}
+
+Trip.init(
   {
     route_id: {
       type: DataTypes.STRING,
@@ -138,7 +239,12 @@ const Trip = sequelize.define(
     wheelchair_accessible: { type: DataTypes.NUMBER },
     bikes_allowed: { type: DataTypes.NUMBER }
   },
-  { tableName: 'trips' }
+  {
+    sequelize,
+    modelName: 'Trip',
+    tableName: 'trips',
+    timestamps: false
+  }
 )
 
 Trip.belongsTo(Route, { as: 'route', foreignKey: 'route_route_id' })
@@ -148,8 +254,20 @@ Trip.belongsTo(Calendar, { as: 'calendar', foreignKey: 'calendar_service_id' })
 Calendar.hasMany(Trip, { as: 'trips', foreignKey: 'calendar_service_id' })
 
 // StopTime
-const StopTime = sequelize.define(
-  'StopTime',
+export class StopTime extends Model<InferAttributes<StopTime>, InferCreationAttributes<StopTime>> {
+  declare trip_id: ForeignKey<Trip['trip_id']>
+  declare arrival_time: string
+  declare departure_time: string
+  declare stop_id: ForeignKey<Stop['stop_id']>
+  declare stop_sequence: string
+  declare stop_headsign: string | null
+  declare pickup_type: number | null
+  declare drop_off_type: number | null
+  declare shape_dist_traveled: number | null
+  declare timepoint: number | null
+}
+
+StopTime.init(
   {
     trip_id: {
       type: DataTypes.STRING,
@@ -170,7 +288,12 @@ const StopTime = sequelize.define(
     shape_dist_traveled: { type: DataTypes.FLOAT },
     timepoint: { type: DataTypes.NUMBER }
   },
-  { tableName: 'stop_times' }
+  {
+    sequelize,
+    modelName: 'StopTime',
+    tableName: 'stop_times',
+    timestamps: false
+  }
 )
 
 StopTime.belongsTo(Trip, { as: 'trip', foreignKey: 'trip_trip_id' })

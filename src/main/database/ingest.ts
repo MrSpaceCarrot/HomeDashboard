@@ -1,6 +1,6 @@
 // Imports
 import fs from 'fs'
-//import yauzl from 'yauzl'
+import { promises as fsp } from 'fs'
 import AdmZip from 'adm-zip'
 import csv from 'fast-csv'
 import Database from 'better-sqlite3'
@@ -15,7 +15,7 @@ function createTable(tableName: string, columns: string[]): string {
 }
 
 // Ingest single csv file into db
-function ingestFile(db: DB, filePath: string, tableName: string): Promise<void> {
+async function ingestFile(db: DB, filePath: string, tableName: string, port): Promise<void> {
   return new Promise<void>((resolve, reject) => {
     const stream = fs.createReadStream(filePath)
 
@@ -47,36 +47,39 @@ function ingestFile(db: DB, filePath: string, tableName: string): Promise<void> 
         insertRow(columns.map((c) => row[c]))
       })
       .on('end', () => {
+        port.postMessage(`Finished ingesting file ${tableName}`)
         resolve()
       })
   })
 }
 
 // Ingest all files into db
-async function ingestGTFS(db: DB): Promise<boolean> {
+async function ingestGTFS(db: DB, port): Promise<boolean> {
   // Create file
   const zipFile = fs.createWriteStream('gtfs.zip')
 
   // Download gtfs zip file
-  process.parentPort?.postMessage('Downloading GTFS')
+  port.postMessage('Downloading GTFS')
   https.get('https://gtfs.at.govt.nz/gtfs.zip', (response) => {
     response.pipe(zipFile)
     zipFile.on('finish', () => {
-      zipFile.close(() => {
-        process.parentPort?.postMessage('Download finished')
+      zipFile.close(async () => {
+        port.postMessage('Download finished')
 
         // Extract file
         const zip = new AdmZip('gtfs.zip')
         zip.extractAllTo('./gtfs', true)
-        fs.readdir('./gtfs', (_error, files) => {
-          files.forEach((file) => {
-            const tableName = file.replace(/\.txt$/i, '')
-            process.parentPort?.postMessage(`Ingesting file ${file} with name ${tableName}`)
-            ingestFile(db, `./gtfs/${file}`, tableName)
-          })
-        })
 
-        return true
+        // Ingest each file
+        const files = await fsp.readdir('./gtfs')
+        await Promise.all(
+          files.map(async (file) => {
+            const tableName = file.replace(/\.txt$/i, '')
+            port.postMessage(`Ingesting file ${tableName}`)
+            await ingestFile(db, `./gtfs/${file}`, tableName, port)
+          })
+        )
+        port.postMessage('Complete')
       })
     })
   })
@@ -96,10 +99,9 @@ process.parentPort?.on('message', async (e) => {
 
   // Ingest GTFS
   try {
-    ingestGTFS(db)
-    process.parentPort?.postMessage('Finished')
+    await ingestGTFS(db, port)
   } catch (err) {
-    process.parentPort?.postMessage({
+    port.postMessage({
       type: 'error',
       error: err instanceof Error ? err.message : String(err)
     })
