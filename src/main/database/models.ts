@@ -1,5 +1,5 @@
 import { sequelizeConnection } from './connection'
-import { DataTypes, Model, InferAttributes, InferCreationAttributes, ForeignKey } from 'sequelize'
+import { DataTypes, Model, InferAttributes, InferCreationAttributes, ForeignKey, NonAttribute } from 'sequelize'
 
 const sequelize = sequelizeConnection
 
@@ -38,15 +38,15 @@ Agency.init(
 // Calendar
 export class Calendar extends Model<InferAttributes<Calendar>, InferCreationAttributes<Calendar>> {
   declare service_id: string
-  declare monday: number | null
-  declare tuesday: number | null
-  declare wednesday: number | null
-  declare thursday: number | null
-  declare friday: number | null
-  declare saturday: number | null
-  declare sunday: number | null
-  declare start_date: number | null
-  declare end_date: number | null
+  declare monday: number
+  declare tuesday: number
+  declare wednesday: number
+  declare thursday: number
+  declare friday: number
+  declare saturday: number
+  declare sunday: number
+  declare start_date: number
+  declare end_date: number
 }
 
 Calendar.init(
@@ -99,8 +99,8 @@ CalendarDate.init(
   }
 )
 
-CalendarDate.belongsTo(Calendar, { as: 'calendar', foreignKey: 'calendar_service_id' })
-Calendar.hasMany(CalendarDate, { as: 'calendarDates', foreignKey: 'calendar_service_id' })
+CalendarDate.belongsTo(Calendar, { as: 'calendar', foreignKey: 'service_id' })
+Calendar.hasMany(CalendarDate, { as: 'calendarDates', foreignKey: 'service_id' })
 
 // Stop
 export class Stop extends Model<InferAttributes<Stop>, InferCreationAttributes<Stop>> {
@@ -113,12 +113,23 @@ export class Stop extends Model<InferAttributes<Stop>, InferCreationAttributes<S
   declare zone_id: string | null
   declare stop_url: string | null
   declare location_type: number | null
-  declare parent_station: string | null
+  declare parent_station: ForeignKey<Stop["stop_id"]> | null;
   declare stop_timezone: string | null
   declare platform_code: string | null
   declare wheelchair_boarding: number | null
   declare start_date: string | null
   declare end_date: string | null
+
+  declare parent?: NonAttribute<Stop>;
+  declare childStops?: NonAttribute<Stop[]>;
+
+  // If stop has children, return them all
+  getEffectiveStopIds(): string[] {
+    if (this.childStops && this.childStops.length > 0) {
+      return this.childStops.map(stop => stop.stop_id);
+    }
+    return [this.stop_id];
+  }
 }
 
 Stop.init(
@@ -138,14 +149,6 @@ Stop.init(
     wheelchair_boarding: { type: DataTypes.NUMBER },
     start_date: { type: DataTypes.STRING },
     end_date: { type: DataTypes.STRING }
-
-    /*
-    parent_stop_id: {
-      type: DataTypes.STRING,
-      allowNull: true,
-      references: { model: 'stops', key: 'stop_id' }
-    }
-    */
   },
   {
     sequelize,
@@ -155,10 +158,8 @@ Stop.init(
   }
 )
 
-/*
-Stop.belongsTo(Stop, { as: 'parent', foreignKey: 'parent_stop_id', targetKey: 'stop_id' })
-Stop.hasMany(Stop, { as: 'childStops', foreignKey: 'parent_stop_id', sourceKey: 'stop_id' })
-*/
+Stop.belongsTo(Stop, { as: 'parent', foreignKey: 'parent_station', targetKey: 'stop_id' })
+Stop.hasMany(Stop, { as: 'childStops', foreignKey: 'parent_station', sourceKey: 'stop_id' })
 
 // Route
 export class Route extends Model<InferAttributes<Route>, InferCreationAttributes<Route>> {
@@ -201,8 +202,8 @@ Route.init(
   }
 )
 
-Route.belongsTo(Agency, { as: 'agency', foreignKey: 'agency_agency_id' })
-Agency.hasMany(Route, { as: 'routes', foreignKey: 'agency_agency_id' })
+Route.belongsTo(Agency, { as: 'agency', foreignKey: 'agency_id' })
+Agency.hasMany(Route, { as: 'routes', foreignKey: 'agency_id' })
 
 // Trip
 export class Trip extends Model<InferAttributes<Trip>, InferCreationAttributes<Trip>> {
@@ -216,6 +217,8 @@ export class Trip extends Model<InferAttributes<Trip>, InferCreationAttributes<T
   declare shape_id: string | null
   declare wheelchair_accessible: number | null
   declare bikes_allowed: number | null
+
+  declare route: NonAttribute<Route>;
 }
 
 Trip.init(
@@ -247,11 +250,11 @@ Trip.init(
   }
 )
 
-Trip.belongsTo(Route, { as: 'route', foreignKey: 'route_route_id' })
-Route.hasMany(Trip, { as: 'trips', foreignKey: 'route_route_id' })
+Trip.belongsTo(Route, { as: 'route', foreignKey: 'route_id' })
+Route.hasMany(Trip, { as: 'trips', foreignKey: 'route_id' })
 
-Trip.belongsTo(Calendar, { as: 'calendar', foreignKey: 'calendar_service_id' })
-Calendar.hasMany(Trip, { as: 'trips', foreignKey: 'calendar_service_id' })
+Trip.belongsTo(Calendar, { as: 'calendar', foreignKey: 'service_id' })
+Calendar.hasMany(Trip, { as: 'trips', foreignKey: 'service_id' })
 
 // StopTime
 export class StopTime extends Model<InferAttributes<StopTime>, InferCreationAttributes<StopTime>> {
@@ -260,7 +263,7 @@ export class StopTime extends Model<InferAttributes<StopTime>, InferCreationAttr
   declare departure_time: string
   declare stop_id: ForeignKey<Stop['stop_id']>
   declare stop_sequence: string
-  declare stop_headsign: string | null
+  declare stop_headsign: string
   declare pickup_type: number | null
   declare drop_off_type: number | null
   declare shape_dist_traveled: number | null
@@ -296,8 +299,8 @@ StopTime.init(
   }
 )
 
-StopTime.belongsTo(Trip, { as: 'trip', foreignKey: 'trip_trip_id' })
-Trip.hasMany(StopTime, { as: 'stopTimes', foreignKey: 'trip_trip_id' })
+StopTime.belongsTo(Trip, { as: 'trip', foreignKey: 'trip_id' })
+Trip.hasMany(StopTime, { as: 'stopTimes', foreignKey: 'trip_id' })
 
-StopTime.belongsTo(Stop, { as: 'stop', foreignKey: 'stop_stop_id' })
-Stop.hasMany(StopTime, { as: 'stopTimes', foreignKey: 'stop_stop_id' })
+StopTime.belongsTo(Stop, { as: 'stop', foreignKey: 'stop_id' })
+Stop.hasMany(StopTime, { as: 'stopTimes', foreignKey: 'stop_id' })

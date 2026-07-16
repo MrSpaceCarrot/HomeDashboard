@@ -4,6 +4,7 @@ import { electronApp, optimizer, is } from '@electron-toolkit/utils'
 import icon from '../../resources/icon.png?asset'
 import ingestPath from './database/ingest?modulePath'
 import { getDatabasePath } from './database/path'
+import { getStopTrips } from './utils/bus'
 
 function initializeApp(): void {
   /*
@@ -71,6 +72,10 @@ app.whenReady().then(async () => {
   ipcMain.on('ping', () => console.log('pong'))
 
   initializeApp()
+  // TODO stagger service date if before 4 am
+  await getStopTrips('', new Date()).catch(error => {
+    console.error('Error fetching data:', error.message);
+});
 
   app.on('activate', function () {
     // On macOS it's common to re-create a window in the app when the
