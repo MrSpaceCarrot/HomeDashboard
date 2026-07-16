@@ -5,21 +5,40 @@ import icon from '../../resources/icon.png?asset'
 import ingestPath from './database/ingest?modulePath'
 import { getDatabasePath } from './database/path'
 import { getStopTrips } from './utils/bus'
+import { settingsStore } from './settings'
 
-function initializeApp(): void {
-  /*
-  const dbPath = getDatabasePath()
-  const { port1, port2 } = new MessageChannelMain()
-  const worker = utilityProcess.fork(ingestPath)
-  worker.postMessage({ message: 'start', dbPath: dbPath }, [port1])
-
-  port2.on('message', (e) => {
-    console.log(`GTFS Ingest: ${e.data}`)
+function waitForWorkerComplete(port) {
+  return new Promise((resolve) => {
+    port.on("message", (e) => {
+      if (e.data.type === "complete") {
+        resolve(e)
+      }
+    })
   })
-  port2.start()
-  */
+}
 
+async function initializeApp(): Promise<void> {
   createWindow()
+  
+  // Ingest gtfs data into db
+  if (settingsStore.get('gtfs_skip_ingest') === false) {
+    const dbPath = getDatabasePath()
+    const { port1, port2 } = new MessageChannelMain()
+    const worker = utilityProcess.fork(ingestPath)
+    worker.postMessage({ message: 'start', dbPath: dbPath }, [port1])
+
+    port2.on('message', (e) => {
+      console.log(`GTFS Ingest: ${e.data.message}`)
+    })
+    port2.start()
+
+    await waitForWorkerComplete(port2)
+  }
+
+  // Get all trips for the stop
+  await getStopTrips(settingsStore.get('stop_code')).catch(error => {
+    console.error('Error fetching data:', error.message)
+  })
 }
 
 function createWindow(): void {
@@ -71,11 +90,7 @@ app.whenReady().then(async () => {
   // IPC test
   ipcMain.on('ping', () => console.log('pong'))
 
-  initializeApp()
-  // TODO stagger service date if before 4 am
-  await getStopTrips('', new Date()).catch(error => {
-    console.error('Error fetching data:', error.message);
-});
+  await initializeApp()
 
   app.on('activate', function () {
     // On macOS it's common to re-create a window in the app when the

@@ -6,6 +6,7 @@ export interface TripFull {
   destination: string | null
   occupancy: number
   arrival_time: Date
+  delay_seconds: number
   due: string
   status: string
   route_background_color: string | null

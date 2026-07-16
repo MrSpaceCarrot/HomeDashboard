@@ -5,6 +5,7 @@ import AdmZip from 'adm-zip'
 import csv from 'fast-csv'
 import Database from 'better-sqlite3'
 import * as https from 'https'
+import { settingsStore } from '../settings'
 
 type DB = InstanceType<typeof Database>
 
@@ -47,7 +48,7 @@ async function ingestFile(db: DB, filePath: string, tableName: string, port): Pr
         insertRow(columns.map((c) => row[c]))
       })
       .on('end', () => {
-        port.postMessage(`Finished ingesting file ${tableName}`)
+        port.postMessage({ type: "info", message: `Finished ingesting file ${tableName}` })
         resolve()
       })
   })
@@ -59,12 +60,12 @@ async function ingestGTFS(db: DB, port): Promise<boolean> {
   const zipFile = fs.createWriteStream('gtfs.zip')
 
   // Download gtfs zip file
-  port.postMessage('Downloading GTFS')
-  https.get('https://gtfs.at.govt.nz/gtfs.zip', (response) => {
+  port.postMessage({ type: "info", message: 'Downloading GTFS' })
+  https.get(settingsStore.get('gtfs_schedule_url'), (response) => {
     response.pipe(zipFile)
     zipFile.on('finish', () => {
       zipFile.close(async () => {
-        port.postMessage('Download finished')
+        port.postMessage({ type: "info", message: 'Download finished' })
 
         // Extract file
         const zip = new AdmZip('gtfs.zip')
@@ -75,11 +76,11 @@ async function ingestGTFS(db: DB, port): Promise<boolean> {
         await Promise.all(
           files.map(async (file) => {
             const tableName = file.replace(/\.txt$/i, '')
-            port.postMessage(`Ingesting file ${tableName}`)
+            port.postMessage({ type: "info", message: `Ingesting file ${tableName}` })
             await ingestFile(db, `./gtfs/${file}`, tableName, port)
           })
         )
-        port.postMessage('Complete')
+        port.postMessage({ type: "complete", message: 'Complete' })
       })
     })
   })
@@ -94,16 +95,15 @@ process.parentPort?.on('message', async (e) => {
 
   // When start signal is sent, delete old db and make new one
   if (e.data.message !== 'start') return
-  fs.unlinkSync(e.data.dbPath)
+  if (fs.existsSync(e.data.dbPath)) {
+    fs.unlinkSync(e.data.dbPath)
+  }
   const db = new Database(e.data.dbPath)
 
   // Ingest GTFS
   try {
     await ingestGTFS(db, port)
   } catch (err) {
-    port.postMessage({
-      type: 'error',
-      error: err instanceof Error ? err.message : String(err)
-    })
+    port.postMessage({type: 'error', error: err instanceof Error ? err.message : String(err)})
   }
 })

@@ -1,11 +1,19 @@
 // Imports
 import { Op } from 'sequelize'
-import { Calendar, CalendarDate, Stop, StopTime, Trip } from '../database/models'
+import { Calendar, CalendarDate, Stop, StopTime, Trip, Route } from '../database/models'
 import { TripFull } from '../types'
+import { settingsStore } from '../settings'
+import GtfsRealtimeBindings from "gtfs-realtime-bindings";
+
+const { Effect } = GtfsRealtimeBindings.transit_realtime.Alert;
 
 // Capitalize first letter of each word
 function capitalize(sentence: string): string {
-  return sentence.toLowerCase().split(' ').map(word => word.charAt(0).toUpperCase() + word.substring(1)).join(' ');
+  return sentence
+    .toLowerCase()
+    .split(' ')
+    .map((word) => word.charAt(0).toUpperCase() + word.substring(1))
+    .join(' ')
 }
 
 // YYYYMMDD to Date
@@ -13,7 +21,7 @@ function GTFSDateToDate(dateString: string): Date {
   const year = dateString.substring(0, 4)
   const month = dateString.substring(4, 6)
   const day = dateString.substring(6, 8)
-  return new Date(`${year}-${month}-${day}`); 
+  return new Date(`${year}-${month}-${day}`)
 }
 
 // Date to YYYYMMDD
@@ -30,7 +38,7 @@ function GTFSTimeToMs(gtfs_time: string): number {
   const hours = parseInt(gtfs_time.substring(0, 2))
   const minutes = parseInt(gtfs_time.substring(3, 5))
   const seconds = parseInt(gtfs_time.substring(6, 8))
-  return (1000 * seconds) + (1000 * 60 * minutes) + (1000 * 60 * 60 * hours)
+  return 1000 * seconds + 1000 * 60 * minutes + 1000 * 60 * 60 * hours
 }
 
 // Get stop id from stop code
@@ -52,14 +60,23 @@ export async function getStopNameFromStopID(stop_id: string): Promise<string | n
 }
 
 // Return all stop times for a stop on a given day
-export async function getStopTrips(stop_id: string, service_date: Date): Promise<null> {
+export async function getStopTrips(stop_code: string): Promise<null> {
+  // If it is before 4 am, use yesterday as the service day to account for services past midnight
+  let service_date = new Date()
+  if (service_date.getHours() < 4) {
+    service_date.setDate(service_date.getDate() - 1)
+  }
+  service_date.setHours(0,0,0,0)
+  
   // Get all stop times at the stop
   // If a stop has children, get times for them as well
-  const db_stop = await Stop.findOne({ where: { stop_id: stop_id } })
-  if (!db_stop) { return null }
+  const db_stop = await Stop.findOne({ where: { stop_code: stop_code } })
+  if (!db_stop) {
+    return null
+  }
 
   const db_stop_ids = db_stop.getEffectiveStopIds()
-  const db_stop_times = await StopTime.findAll({ where: { stop_id: {[Op.in]: db_stop_ids} } })
+  const db_stop_times = await StopTime.findAll({ where: { stop_id: { [Op.in]: db_stop_ids } } })
 
   // Store list of processed stop times
   let trips: TripFull[] = []
@@ -67,8 +84,13 @@ export async function getStopTrips(stop_id: string, service_date: Date): Promise
   // Exclude stop times which aren't on the specified day
   for (const stop_time of db_stop_times) {
     // Get trip
-    const db_trip = await Trip.findOne({ where: { trip_id: stop_time.trip_id }, include: { association: "route" } })
-    if (!db_trip) { continue }
+    const db_trip = await Trip.findOne({
+      where: { trip_id: stop_time.trip_id },
+      include: { association: 'route' }
+    })
+    if (!db_trip) {
+      continue
+    }
 
     // Get service id
     const service_id = db_trip.service_id
@@ -76,30 +98,46 @@ export async function getStopTrips(stop_id: string, service_date: Date): Promise
     // Keep track of wether the service is active on this day
     let service_active = true
 
-    // Check if the service runs on this weekday
+    // Get calendar for the service
     const db_calendar = await Calendar.findOne({ where: { service_id: service_id } })
-    if (!db_calendar) { continue }
-
-    const weekdays = ["sunday", "monday", "tuesday", "wednesday", "thursday", "friday", "saturday"]
-    const current_weekday = weekdays[service_date.getDay()]
-    if (!db_calendar.get(current_weekday)) { service_active = false }
+    if (!db_calendar) {
+      continue
+    }
 
     // Check if the date is between the start and end date
-    if (service_date < GTFSDateToDate(db_calendar.start_date.toString()) || service_date > GTFSDateToDate(db_calendar.end_date.toString())) { service_active = false }
-  
+    if (
+      service_date < GTFSDateToDate(db_calendar.start_date.toString()) ||
+      service_date > GTFSDateToDate(db_calendar.end_date.toString())
+    ) {
+      service_active = false
+    }
+
+    // Check if the service runs on this weekday
+    const weekdays = ['sunday', 'monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday']
+    const current_weekday = weekdays[service_date.getDay()]
+    if (db_calendar.get(current_weekday) === '0') {
+      service_active = false
+    }
+
     // Check calendar exceptions (if a service is added when it usually isn't)
-    const db_exceptions = await CalendarDate.findAll({ where: { service_id: service_id, date: DateToGTFSDate(service_date) } })
+    const db_exceptions = await CalendarDate.findAll({
+      where: { service_id: service_id, date: DateToGTFSDate(service_date) }
+    })
     for (const exception of db_exceptions) {
-      if (exception.exception_type == 2) {
-        service_active = false
-      } else {
+      if (exception.exception_type == 1) {
         service_active = true
+      } else if (exception.exception_type == 2) {
+        service_active = false
       }
     }
-    if (!service_active) { continue }
+    if (!service_active) {
+      continue
+    }
 
     // Exclude stop time if the trip terminates at this stop
-    if (stop_time.pickup_type == 1) { continue }
+    if (stop_time.pickup_type == 1) {
+      continue
+    }
 
     // Add stop time to list
     const arrival_delta = GTFSTimeToMs(stop_time.arrival_time)
@@ -110,19 +148,155 @@ export async function getStopTrips(stop_id: string, service_date: Date): Promise
       destination: capitalize(stop_time.stop_headsign),
       occupancy: 0,
       arrival_time: arrival_date,
-      due: "",
-      status: "",
-      route_background_color: "",
-      route_text_color: "",
+      delay_seconds: 0,
+      due: '',
+      status: '',
+      route_background_color: '',
+      route_text_color: '',
       is_live: false
     })
   }
-  trips.sort((a, b) => a.arrival_time > b.arrival_time ? 1 : -1)
+  trips.sort((a, b) => (a.arrival_time > b.arrival_time ? 1 : -1))
 
-  // Test
-  for (const i of trips) {
-    console.log(i)
+  // Fetch live data if enabled
+  let use_live_data = settingsStore.get('gtfs_realtime_enabled')
+  let feed!: GtfsRealtimeBindings.transit_realtime.FeedMessage
+  if (use_live_data) {
+    const response = await fetch(settingsStore.get('gtfs_realtime_url'), {
+      headers: {'Ocp-Apim-Subscription-Key': settingsStore.get('gtfs_realtime_api_key'), 'Accept': 'application/x-protobuf'},
+      cache: 'no-store'
+    })
+    const buffer = await response.arrayBuffer();
+    feed = GtfsRealtimeBindings.transit_realtime.FeedMessage.decode(new Uint8Array(buffer))
   }
+
+  // Filter the collected trips further, and add additional info from live data
+  let filtered_trips: TripFull[] = []
+  for (const trip of trips) {
+    // Keep filtering trips until the screen fills up
+    if (filtered_trips.length < settingsStore.get('num_trips_to_display')) {
+      // Get info from realtime if enabled
+      if (use_live_data) {
+        for (const entity of feed.entity) {
+          // Set trip delay
+          if (entity.tripUpdate && entity.tripUpdate.trip.tripId === trip.trip?.trip_id) {
+            trip.is_live = true
+            if (entity.tripUpdate.delay) {
+              trip.delay_seconds = entity.tripUpdate.delay
+            }
+            trip.arrival_time = new Date(trip.arrival_time.getTime() + (trip.delay_seconds * 1000))
+          }
+
+          // Set vehicle occupancy
+          if (entity.vehicle && entity.vehicle.trip && entity.vehicle.trip.tripId === trip.trip?.trip_id && entity.vehicle.occupancyStatus) {
+            trip.occupancy = entity.vehicle.occupancyStatus
+          }
+        }
+      }
+
+      // Exclude arrivals before now
+      if (trip.arrival_time < new Date()) {
+        continue
+      }
+
+      // Format due
+      const due_delta = trip.arrival_time.getTime() - new Date().getTime()
+      const seconds_due = due_delta / 1000
+      if (-30 < seconds_due && seconds_due < 59) {
+        trip.due = 'Now'
+      } else if (60 < seconds_due && seconds_due < settingsStore.get('time_to_show_mins') * 60) {
+        trip.due = Math.round(seconds_due / 60).toString()
+      } else {
+        trip.due = trip.arrival_time.toLocaleTimeString([], {hour: '2-digit',minute: '2-digit', hour12: false});
+      }
+
+      // Format delay
+      const trip_delay_mins = Math.round(trip.delay_seconds / 60)
+      if (trip_delay_mins < 0) {
+        trip.status = `${-trip_delay_mins} min early`
+      } else if (trip_delay_mins == 0) {
+        if (trip.is_live) {
+          trip.status = `On Time`
+        } else {
+          trip.status = 'Scheduled'
+        }
+      } else {
+        trip.status = `${trip_delay_mins} min late`
+      }
+
+      // Get route background and text color if present
+      const db_route = await Route.findOne({ where: { route_id: trip.trip?.route_id } })
+      if (db_route?.route_color) {
+        trip.route_background_color = db_route.route_color
+      }
+      if (db_route?.route_text_color) {
+        trip.route_text_color = db_route.route_text_color
+      }
+
+      // Check if the trip is cancelled
+      if (use_live_data) {
+        for (const entity of feed.entity) {
+          if (entity.alert) {
+            // Active period start
+            let active_period_start
+            if (entity.alert.activePeriod && entity.alert.activePeriod[0].start) {
+              active_period_start = new Date(Number(entity.alert.activePeriod[0].start) * 1000)
+            }
+
+            // Active period end
+            let active_period_end
+            if (entity.alert.activePeriod && entity.alert.activePeriod[0].end) {
+              active_period_end = new Date(Number(entity.alert.activePeriod[0].end) * 1000)
+            }
+
+            // Check if the arrival time is within the active period
+            if ((active_period_start && trip.arrival_time > active_period_start)) {
+              if (active_period_end && trip.arrival_time > active_period_end) {
+                break
+              } else {
+                if (entity.alert.informedEntity) {
+                  for (const informed_entity of entity.alert.informedEntity) {
+                    // Check if trip is cancelled because the route or stop is affected
+                    if ((informed_entity.routeId && informed_entity.routeId === db_route?.route_id) ||
+                        (informed_entity.stopId && informed_entity.stopId === db_stop?.stop_id)
+                    ) {
+                      if (entity.alert.effect === Effect.NO_SERVICE) {
+                        trip.status = 'Cancelled'
+                        trip.is_live = false
+                        break
+                      }
+                    }
+
+                    // Check if trip is cancelled specifically on basis of trip
+                    if (informed_entity.trip && informed_entity.trip.tripId === trip.trip?.trip_id) {
+                      if (entity.alert.effect === Effect.NO_SERVICE) {
+                        trip.status = 'Cancelled'
+                        trip.is_live = false
+                        break
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+      // Truncate destination if it's too long
+      if (trip.destination && trip.destination?.length > 20) {
+        trip.destination = `${trip.destination.slice(0, 20)}...`
+      }
+      
+      // Add final trip to list
+      filtered_trips.push(trip)
+    }
+  }
+  // Filter again after accounting for delays
+  filtered_trips.sort((a, b) => (a.arrival_time > b.arrival_time ? 1 : -1))
   
+  for (const i of filtered_trips) {
+    console.log(`${i.route} - ${i.destination} - ${i.due} - ${i.status} - ${i.arrival_time} - ${i.trip?.trip_id}`)
+  }
+
   return null
 }

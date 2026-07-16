@@ -1,5 +1,12 @@
 import { sequelizeConnection } from './connection'
-import { DataTypes, Model, InferAttributes, InferCreationAttributes, ForeignKey, NonAttribute } from 'sequelize'
+import {
+  DataTypes,
+  Model,
+  InferAttributes,
+  InferCreationAttributes,
+  ForeignKey,
+  NonAttribute
+} from 'sequelize'
 
 const sequelize = sequelizeConnection
 
@@ -113,22 +120,22 @@ export class Stop extends Model<InferAttributes<Stop>, InferCreationAttributes<S
   declare zone_id: string | null
   declare stop_url: string | null
   declare location_type: number | null
-  declare parent_station: ForeignKey<Stop["stop_id"]> | null;
+  declare parent_station: ForeignKey<Stop['stop_id']> | null
   declare stop_timezone: string | null
   declare platform_code: string | null
   declare wheelchair_boarding: number | null
   declare start_date: string | null
   declare end_date: string | null
 
-  declare parent?: NonAttribute<Stop>;
-  declare childStops?: NonAttribute<Stop[]>;
+  declare parent?: NonAttribute<Stop>
+  declare childStops?: NonAttribute<Stop[]>
 
   // If stop has children, return them all
   getEffectiveStopIds(): string[] {
     if (this.childStops && this.childStops.length > 0) {
-      return this.childStops.map(stop => stop.stop_id);
+      return this.childStops.map((stop) => stop.stop_id)
     }
-    return [this.stop_id];
+    return [this.stop_id]
   }
 }
 
@@ -218,7 +225,7 @@ export class Trip extends Model<InferAttributes<Trip>, InferCreationAttributes<T
   declare wheelchair_accessible: number | null
   declare bikes_allowed: number | null
 
-  declare route: NonAttribute<Route>;
+  declare route: NonAttribute<Route>
 }
 
 Trip.init(
