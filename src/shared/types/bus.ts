@@ -1,7 +1,7 @@
-import { Trip } from "../database/models"
+import { Trip } from "@main/database/models"
 
 export interface TripFull {
-  trip: Trip | null
+  trip: Trip | null | undefined
   route: string | null
   destination: string | null
   occupancy: number

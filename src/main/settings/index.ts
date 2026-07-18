@@ -1,5 +1,5 @@
 import Store from 'electron-store'
-import { Settings } from '../types'
+import { Settings } from '@shared/types'
 
 export const settingsStore = new Store<Settings>({
   defaults: {
@@ -7,7 +7,7 @@ export const settingsStore = new Store<Settings>({
     num_trips_to_display: 5,
     time_to_show_mins: 30,
     gtfs_ingest_hour: 21,
-    gtfs_skip_ingest: true,
+    gtfs_skip_ingest: false,
     gtfs_schedule_url: 'https://gtfs.at.govt.nz/gtfs.zip',
     gtfs_realtime_enabled: false,
     gtfs_realtime_url: 'https://api.at.govt.nz/realtime/legacy',
@@ -29,5 +29,5 @@ export const settingsStore = new Store<Settings>({
         text_color: '#001930'
       }
     ]
-  }
+  },
 })

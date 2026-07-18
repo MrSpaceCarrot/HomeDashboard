@@ -6,3 +6,4 @@ out
 *.log*
 /gtfs
 gtfs.zip
+.vscode/*

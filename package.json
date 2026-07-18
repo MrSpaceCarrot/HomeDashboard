@@ -30,6 +30,7 @@
     "electron-updater": "^6.3.9",
     "fast-csv": "^5.0.7",
     "gtfs-realtime-bindings": "^2.1.0",
+    "pinia": "^4.0.2",
     "sequelize": "^6.37.8",
     "sqlite3": "^6.0.1",
     "tailwindcss": "^4.3.2",

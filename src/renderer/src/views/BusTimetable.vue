@@ -1,25 +1,15 @@
 <script setup lang="ts">
 // Imports
 import { ref, onMounted, onBeforeUnmount } from 'vue'
+import { useTripStore } from '@renderer/stores/tripStore'
+
+const tripStore = useTripStore()
 
 // Variables
 let timer = ref()
 let clockValue = ref('00:00:00')
-let stopName = ref('Stop 133 - Waitemata Train Station')
-let trips = [
-  {
-    id: 0,
-    route: '97R',
-    destination: 'City',
-    occupancy: 5,
-    arrival_time: new Date(),
-    due: new Date(),
-    status: 'On Time',
-    route_background_color: '#0073BD',
-    route_text_color: '#000000',
-    is_live: false
-  }
-]
+let stopName = ref('STOP NAME HERE')
+
 // Functions
 function formatTime(number: number): string {
   return number < 10 ? '0' + number : number.toString()
@@ -43,63 +33,69 @@ onBeforeUnmount(() => {
 </script>
 
 <template>
-  <div class="flex-col">
+  <div class="flex-col relative h-screen">
     <!-- Header -->
-    <div class="bg-[#052849] grid grid-cols-7">
-      <div class="col-span-1 p-2">
-        <p class="text-white">Route</p>
+    <div class="bg-[#052849] grid grid-cols-7 absolute h-[3em] w-full">
+      <div class="col-span-1 pl-2 my-auto @container">
+        <p class="text-white text-[2.5cqh]">Route</p>
       </div>
 
-      <div class="col-span-3 p-2">
-        <p class="text-white">Destination</p>
+      <div class="col-span-3 pl-4 my-auto @container">
+        <p class="text-white text-[2.5cqh]">Destination</p>
       </div>
 
-      <div class="col-span-2 text-center p-2">
-        <p class="text-white">Occupany</p>
+      <div class="col-span-2 text-center my-auto @container">
+        <p class="text-white text-[2.5cqh]">Occupany</p>
       </div>
 
-      <div class="col-span-1 text-right p-2">
-        <p class="text-white">Due</p>
+      <div class="col-span-1 pr-2 text-right my-auto @container">
+        <p class="text-white text-[2.5cqh]">Due</p>
       </div>
     </div>
     <!-- /Header -->
 
     <!-- Timetable -->
-    <div class="bg-[#001930]">
-      <div v-for="trip in trips" :key="trip.id" class="m-0 p-0">
-        <div class="grid grid-cols-7">
-          <div class="col-span-1 p-2">
-            <span
-              class="text-white p-2 rounded text-3xl"
-              :style="{ backgroundColor: trip.route_background_color }"
-              >{{ trip.route }}
-            </span>
+    <div class="bg-[#001930] absolute top-[3em] bottom-[3em] w-full grid grid-rows-5">
+      <div v-if="tripStore.trips.length > 0" v-for="trip in tripStore.trips" class="p-0 my-auto h-full">
+        <div class="grid grid-cols-7 h-full">
+          <div class="col-span-1 p-3 text-center">
+            <div class="h-full w-full rounded-md flex items-center justify-center @container"
+              :style="{ ...(trip.route_background_color ? { backgroundColor: trip.route_background_color } : { border: 'solid 0.3em white' })}"
+            >
+              <span class="text-[8cqh] font-bold" 
+                :style="{ ...(trip.route_text_color ? { color: trip.route_text_color } : {} )}"
+              >{{ trip.route }}</span>
+            </div>
           </div>
 
-          <div class="col-span-3 p-2">
-            <p class="text-white">{{ trip.destination }}</p>
+          <div class="col-span-3 my-auto @container">
+            <p class="text-white pl-4 text-[8cqh]">{{ trip.destination }}</p>
           </div>
 
-          <div class="col-span-2 text-center p-2">
-            <p class="text-white">{{ trip.occupancy }}</p>
+          <div class="col-span-2 text-center p-2 my-auto">
+            <p class="text-white ">{{ trip.occupancy }}</p>
           </div>
 
-          <div class="col-span-1 text-right p-2">
+          <div class="col-span-1 text-right p-2 my-auto">
             <p class="text-white">{{ trip.due }}</p>
           </div>
         </div>
+      </div>
+
+      <div v-else>
+        <p class="text-white text-4xl p-2">Loading</p>
       </div>
     </div>
     <!-- /Timetable -->
 
     <!-- Footer -->
-    <div class="bg-[#052849] grid grid-cols-2">
-      <div class="col-span-1 p-2">
-        <p class="text-white">{{ stopName }}</p>
+    <div class="bg-[#052849] grid grid-cols-2 absolute bottom-0 h-[3em] w-full">
+      <div class="col-span-1 my-auto pl-2 @container">
+        <p class="text-white text-[2.5cqh]">{{ stopName }}</p>
       </div>
 
-      <div class="col-span-1 text-right p-2">
-        <p class="text-white">{{ clockValue }}</p>
+      <div class="col-span-1 text-right my-auto pr-2 @container">
+        <p class="text-white text-[2.5cqh]">{{ clockValue }}</p>
       </div>
     </div>
     <!-- /Footer -->

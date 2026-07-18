@@ -1,11 +1,9 @@
 // Imports
 import { Op } from 'sequelize'
-import { Calendar, CalendarDate, Stop, StopTime, Trip, Route } from '../database/models'
-import { TripFull } from '../types'
-import { settingsStore } from '../settings'
-import GtfsRealtimeBindings from "gtfs-realtime-bindings";
+import type { TripFull } from '@shared/types'
+import GtfsRealtimeBindings from 'gtfs-realtime-bindings'
 
-const { Effect } = GtfsRealtimeBindings.transit_realtime.Alert;
+const { Effect } = GtfsRealtimeBindings.transit_realtime.Alert
 
 // Capitalize first letter of each word
 function capitalize(sentence: string): string {
@@ -43,6 +41,7 @@ function GTFSTimeToMs(gtfs_time: string): number {
 
 // Get stop id from stop code
 export async function getStopIDFromStopCode(stop_code: string): Promise<string | null> {
+  const { Stop } = await import('../database/models')
   const db_stop = await Stop.findOne({ where: { stop_code: stop_code } })
   if (db_stop) {
     return db_stop?.stop_id
@@ -52,6 +51,7 @@ export async function getStopIDFromStopCode(stop_code: string): Promise<string |
 
 // Get stop name from stop id
 export async function getStopNameFromStopID(stop_id: string): Promise<string | null> {
+  const { Stop } = await import('../database/models')
   const db_stop = await Stop.findByPk(stop_id)
   if (db_stop) {
     return db_stop?.stop_name
@@ -59,27 +59,29 @@ export async function getStopNameFromStopID(stop_id: string): Promise<string | n
   return null
 }
 
-// Return all stop times for a stop on a given day
-export async function getStopTrips(stop_code: string): Promise<null> {
+// Return next trips for the current stop using all set settings
+export async function getStopTrips(settingsStore): Promise<TripFull[] | null> {
+  const { Calendar, CalendarDate, Stop, StopTime, Trip, Route } = await import('../database/models')
+  
   // If it is before 4 am, use yesterday as the service day to account for services past midnight
-  let service_date = new Date()
+  const service_date = new Date()
   if (service_date.getHours() < 4) {
     service_date.setDate(service_date.getDate() - 1)
   }
-  service_date.setHours(0,0,0,0)
-  
+  service_date.setHours(0, 0, 0, 0)
+
   // Get all stop times at the stop
   // If a stop has children, get times for them as well
-  const db_stop = await Stop.findOne({ where: { stop_code: stop_code } })
+  const db_stop = await Stop.findOne({ where: { stop_code: settingsStore.stop_code }, include: { association: 'childStops' }  })
   if (!db_stop) {
     return null
   }
 
   const db_stop_ids = db_stop.getEffectiveStopIds()
-  const db_stop_times = await StopTime.findAll({ where: { stop_id: { [Op.in]: db_stop_ids } } })
+  const db_stop_times = await StopTime.findAll({ where: { stop_id: { [Op.in]: db_stop_ids } }})
 
   // Store list of processed stop times
-  let trips: TripFull[] = []
+  const trips: TripFull[] = []
 
   // Exclude stop times which aren't on the specified day
   for (const stop_time of db_stop_times) {
@@ -115,7 +117,7 @@ export async function getStopTrips(stop_code: string): Promise<null> {
     // Check if the service runs on this weekday
     const weekdays = ['sunday', 'monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday']
     const current_weekday = weekdays[service_date.getDay()]
-    if (db_calendar.get(current_weekday) === '0') {
+    if (db_calendar.get(current_weekday) === 0) {
       service_active = false
     }
 
@@ -135,7 +137,7 @@ export async function getStopTrips(stop_code: string): Promise<null> {
     }
 
     // Exclude stop time if the trip terminates at this stop
-    if (stop_time.pickup_type == 1) {
+    if (stop_time.pickup_type === 1) {
       continue
     }
 
@@ -159,22 +161,25 @@ export async function getStopTrips(stop_code: string): Promise<null> {
   trips.sort((a, b) => (a.arrival_time > b.arrival_time ? 1 : -1))
 
   // Fetch live data if enabled
-  let use_live_data = settingsStore.get('gtfs_realtime_enabled')
+  const use_live_data = settingsStore.gtfs_realtime_enabled
   let feed!: GtfsRealtimeBindings.transit_realtime.FeedMessage
   if (use_live_data) {
-    const response = await fetch(settingsStore.get('gtfs_realtime_url'), {
-      headers: {'Ocp-Apim-Subscription-Key': settingsStore.get('gtfs_realtime_api_key'), 'Accept': 'application/x-protobuf'},
+    const response = await fetch(settingsStore.gtfs_realtime_url, {
+      headers: {
+        'Ocp-Apim-Subscription-Key': settingsStore.gtfs_realtime_api_key,
+        Accept: 'application/x-protobuf'
+      },
       cache: 'no-store'
     })
-    const buffer = await response.arrayBuffer();
+    const buffer = await response.arrayBuffer()
     feed = GtfsRealtimeBindings.transit_realtime.FeedMessage.decode(new Uint8Array(buffer))
   }
 
   // Filter the collected trips further, and add additional info from live data
-  let filtered_trips: TripFull[] = []
+  const filtered_trips: TripFull[] = []
   for (const trip of trips) {
     // Keep filtering trips until the screen fills up
-    if (filtered_trips.length < settingsStore.get('num_trips_to_display')) {
+    if (filtered_trips.length < settingsStore.num_trips_to_display) {
       // Get info from realtime if enabled
       if (use_live_data) {
         for (const entity of feed.entity) {
@@ -184,11 +189,16 @@ export async function getStopTrips(stop_code: string): Promise<null> {
             if (entity.tripUpdate.delay) {
               trip.delay_seconds = entity.tripUpdate.delay
             }
-            trip.arrival_time = new Date(trip.arrival_time.getTime() + (trip.delay_seconds * 1000))
+            trip.arrival_time = new Date(trip.arrival_time.getTime() + trip.delay_seconds * 1000)
           }
 
           // Set vehicle occupancy
-          if (entity.vehicle && entity.vehicle.trip && entity.vehicle.trip.tripId === trip.trip?.trip_id && entity.vehicle.occupancyStatus) {
+          if (
+            entity.vehicle &&
+            entity.vehicle.trip &&
+            entity.vehicle.trip.tripId === trip.trip?.trip_id &&
+            entity.vehicle.occupancyStatus
+          ) {
             trip.occupancy = entity.vehicle.occupancyStatus
           }
         }
@@ -204,10 +214,14 @@ export async function getStopTrips(stop_code: string): Promise<null> {
       const seconds_due = due_delta / 1000
       if (-30 < seconds_due && seconds_due < 59) {
         trip.due = 'Now'
-      } else if (60 < seconds_due && seconds_due < settingsStore.get('time_to_show_mins') * 60) {
+      } else if (60 < seconds_due && seconds_due < settingsStore.time_to_show_mins * 60) {
         trip.due = Math.round(seconds_due / 60).toString()
       } else {
-        trip.due = trip.arrival_time.toLocaleTimeString([], {hour: '2-digit',minute: '2-digit', hour12: false});
+        trip.due = trip.arrival_time.toLocaleTimeString([], {
+          hour: '2-digit',
+          minute: '2-digit',
+          hour12: false
+        })
       }
 
       // Format delay
@@ -224,13 +238,40 @@ export async function getStopTrips(stop_code: string): Promise<null> {
         trip.status = `${trip_delay_mins} min late`
       }
 
-      // Get route background and text color if present
       const db_route = await Route.findOne({ where: { route_id: trip.trip?.route_id } })
-      if (db_route?.route_color) {
-        trip.route_background_color = db_route.route_color
+      
+      // Get route background and text color if present
+      // Check if there are color overrides for this route in the config
+      let custom_color_used = false
+      for (const color_override of settingsStore.color_overrides) {
+        if (color_override.route === db_route!.route_short_name) {
+          trip.route_background_color = color_override.background_color
+          trip.route_text_color = color_override.text_color
+          custom_color_used = true
+          break
+        }
       }
-      if (db_route?.route_text_color) {
-        trip.route_text_color = db_route.route_text_color
+
+      if (!custom_color_used) {
+        // Check if the route has a color
+        if (db_route?.route_text_color) {
+          trip.route_text_color = `#${db_route.route_text_color}`
+        }
+        
+        if (db_route?.route_color) {
+          trip.route_background_color = `#${db_route.route_color}`
+        } 
+        
+        // If route is frequent with no color set, add one
+        else if (/^\d{2}[A-Za-z]?$/.test(db_route!.route_short_name)) {
+          trip.route_background_color = '#00A7E5'
+          trip.route_text_color = '#001930'
+        }
+
+        // If route is infrequent and no other conditions are met
+        else {
+          trip.route_text_color = '#FFFFFF'
+        }
       }
 
       // Check if the trip is cancelled
@@ -250,15 +291,16 @@ export async function getStopTrips(stop_code: string): Promise<null> {
             }
 
             // Check if the arrival time is within the active period
-            if ((active_period_start && trip.arrival_time > active_period_start)) {
+            if (active_period_start && trip.arrival_time > active_period_start) {
               if (active_period_end && trip.arrival_time > active_period_end) {
                 break
               } else {
                 if (entity.alert.informedEntity) {
                   for (const informed_entity of entity.alert.informedEntity) {
                     // Check if trip is cancelled because the route or stop is affected
-                    if ((informed_entity.routeId && informed_entity.routeId === db_route?.route_id) ||
-                        (informed_entity.stopId && informed_entity.stopId === db_stop?.stop_id)
+                    if (
+                      (informed_entity.routeId && informed_entity.routeId === db_route?.route_id) ||
+                      (informed_entity.stopId && informed_entity.stopId === db_stop?.stop_id)
                     ) {
                       if (entity.alert.effect === Effect.NO_SERVICE) {
                         trip.status = 'Cancelled'
@@ -268,7 +310,10 @@ export async function getStopTrips(stop_code: string): Promise<null> {
                     }
 
                     // Check if trip is cancelled specifically on basis of trip
-                    if (informed_entity.trip && informed_entity.trip.tripId === trip.trip?.trip_id) {
+                    if (
+                      informed_entity.trip &&
+                      informed_entity.trip.tripId === trip.trip?.trip_id
+                    ) {
                       if (entity.alert.effect === Effect.NO_SERVICE) {
                         trip.status = 'Cancelled'
                         trip.is_live = false
@@ -286,17 +331,13 @@ export async function getStopTrips(stop_code: string): Promise<null> {
       if (trip.destination && trip.destination?.length > 20) {
         trip.destination = `${trip.destination.slice(0, 20)}...`
       }
-      
-      // Add final trip to list
+
+      // Remove trip to avoid errors when passing it out of sequelize and add final trip to list
+      delete trip.trip
       filtered_trips.push(trip)
     }
   }
   // Filter again after accounting for delays
   filtered_trips.sort((a, b) => (a.arrival_time > b.arrival_time ? 1 : -1))
-  
-  for (const i of filtered_trips) {
-    console.log(`${i.route} - ${i.destination} - ${i.due} - ${i.status} - ${i.arrival_time} - ${i.trip?.trip_id}`)
-  }
-
-  return null
+  return filtered_trips
 }
