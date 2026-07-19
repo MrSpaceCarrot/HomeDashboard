@@ -1,5 +1,6 @@
 import { app, shell, BrowserWindow, ipcMain, utilityProcess, MessageChannelMain } from 'electron'
 import { join } from 'path'
+import fs from 'fs'
 import { electronApp, optimizer, is } from '@electron-toolkit/utils'
 import icon from '../../resources/icon.png?asset'
 import ingestPath from './workers/ingest?modulePath'
@@ -8,7 +9,9 @@ import { getDatabasePath } from './database/path'
 import { settingsStore } from './settings'
 
 let mainWindow: BrowserWindow
+let ingestRunning: boolean = false
 
+// Wait for worker to complete before returning
 function waitForWorkerComplete(port) {
   return new Promise((resolve) => {
     port.on("message", (e) => {
@@ -19,48 +22,71 @@ function waitForWorkerComplete(port) {
   })
 }
 
+// Ingest worker task
+// Every 60 seconds, check if the daily gtfs ingest time has been reached, then update the db
+async function ingestWorkerLoop(dbPath) {
+  while (true) {
+    const now = new Date()
+    if (settingsStore.get('gtfs_skip_ingest') === false && ((now.getHours() === settingsStore.get('gtfs_ingest_hour') && now.getMinutes() === 0) || !fs.existsSync(dbPath))) {
+      ingestRunning = true
+      
+      const { port1, port2 } = new MessageChannelMain()
+      const ingest_worker = utilityProcess.fork(ingestPath, [], {stdio: 'pipe'})
+
+      ingest_worker.stdout?.on('data', (data) => { console.log('WORKER STDOUT:', data.toString()) }) 
+      ingest_worker.stderr?.on('data', (data) => { console.error('WORKER STDERR:', data.toString()) })
+
+      ingest_worker.postMessage({ message: 'start', dbPath: dbPath, settingStore: settingsStore.store }, [port1])
+      port2.start()
+      port2.on('message', (e) => {
+        console.log(`GTFS Ingest: ${e.data.message}`)
+      })
+
+      await waitForWorkerComplete(port2)
+      ingestRunning = false
+    }
+
+    await new Promise(resolve => setTimeout(resolve, 60_000));
+  }
+}
+
+// Trips worker task
+// Every 20 seconds, update trips only if ingest isn't running
+async function tripsWorkerLoop(dbPath) {
+  while (true) {
+    if (!ingestRunning) {
+      const { port1, port2 } = new MessageChannelMain()
+      const trips_worker = utilityProcess.fork(tripsPath, [], {stdio: ['ignore', 'pipe', 'pipe']})
+
+      trips_worker.stdout?.on('data', (data) => { console.log(data.toString()) }) 
+      trips_worker.stderr?.on('data', (data) => { console.error(data.toString()) })
+
+      trips_worker.postMessage({ message: 'start', dbPath: dbPath, settingStore: settingsStore.store }, [port1])
+      port2.start()
+      port2.on('message', (e) => {
+        if (e.data.type === 'complete') {
+          mainWindow.webContents.send('trips:update', e.data.message)
+        } else {
+          console.log(`Trip Update: ${e.data.message}`)
+        }
+
+      })
+
+      await waitForWorkerComplete(port2)
+    }
+
+    await new Promise(resolve => setTimeout(resolve, 20_000));
+  }
+}
+
 async function initializeApp(): Promise<void> {
   createWindow()
 
   const dbPath = getDatabasePath()
   
-  // Ingest gtfs data into db
-  if (settingsStore.get('gtfs_skip_ingest') === false) {
-    const { port1, port2 } = new MessageChannelMain()
-    const ingest_worker = utilityProcess.fork(ingestPath, [], {stdio: 'pipe'})
-
-    ingest_worker.stdout?.on('data', (data) => { console.log('WORKER STDOUT:', data.toString()) }) 
-    ingest_worker.stderr?.on('data', (data) => { console.error('WORKER STDERR:', data.toString()) })
-
-    ingest_worker.postMessage({ message: 'start', dbPath: dbPath, settingStore: settingsStore.store }, [port1])
-    port2.start()
-    port2.on('message', (e) => {
-      console.log(`GTFS Ingest: ${e.data.message}`)
-    })
-
-    await waitForWorkerComplete(port2)
-  }
-  
-  
-  // Get all trips for the stop
-  const { port1, port2 } = new MessageChannelMain()
-  const trips_worker = utilityProcess.fork(tripsPath, [], {stdio: 'pipe'})
-
-  trips_worker.stdout?.on('data', (data) => { console.log('WORKER STDOUT:', data.toString()) }) 
-  trips_worker.stderr?.on('data', (data) => { console.error('WORKER STDERR:', data.toString()) })
-
-  trips_worker.postMessage({ message: 'start', dbPath: dbPath, settingStore: settingsStore.store }, [port1])
-  port2.start()
-  port2.on('message', (e) => {
-    if (e.data.type === 'complete') {
-      mainWindow.webContents.send('trips:update', e.data.message)
-    } else {
-      console.log(`Trip Update: ${e.data.message}`)
-    }
-
-  })
-
-  await waitForWorkerComplete(port2)
+  // Setup workers
+  ingestWorkerLoop(dbPath)
+  tripsWorkerLoop(dbPath)
 }
 
 function createWindow(): void {
@@ -75,7 +101,6 @@ function createWindow(): void {
       preload: join(__dirname, '../preload/index.cjs'),
       sandbox: false
     },
-    transparent: true,
     frame: true
   })
 

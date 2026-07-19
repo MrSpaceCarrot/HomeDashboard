@@ -35,34 +35,34 @@ onBeforeUnmount(() => {
 <template>
   <div class="flex-col relative h-screen">
     <!-- Header -->
-    <div class="bg-[#052849] grid grid-cols-7 absolute h-[3em] w-full">
-      <div class="col-span-1 pl-2 my-auto @container">
-        <p class="text-white text-[2.5cqh]">Route</p>
+    <div class="bg-[#052849] grid grid-cols-7 absolute h-[6cqh] w-full">
+      <div class="col-span-1 pl-4 my-auto @container">
+        <p class="text-white text-[3cqh]">Route</p>
       </div>
 
       <div class="col-span-3 pl-4 my-auto @container">
-        <p class="text-white text-[2.5cqh]">Destination</p>
+        <p class="text-white text-[3cqh]">Destination</p>
       </div>
 
       <div class="col-span-2 text-center my-auto @container">
-        <p class="text-white text-[2.5cqh]">Occupany</p>
+        <p class="text-white text-[3cqh]">Occupany</p>
       </div>
 
       <div class="col-span-1 pr-2 text-right my-auto @container">
-        <p class="text-white text-[2.5cqh]">Due</p>
+        <p class="text-white text-[3cqh]">Due</p>
       </div>
     </div>
     <!-- /Header -->
 
     <!-- Timetable -->
-    <div class="bg-[#001930] absolute top-[3em] bottom-[3em] w-full grid grid-rows-5">
+    <div class="bg-[#001930] absolute top-[6cqh] bottom-[6cqh] w-full grid grid-rows-5">
       <div v-if="tripStore.trips.length > 0" v-for="trip in tripStore.trips" class="p-0 my-auto h-full">
-        <div class="grid grid-cols-7 h-full">
+        <div class="grid grid-cols-7 h-full items-stretch">
           <div class="col-span-1 p-3 text-center">
-            <div class="h-full w-full rounded-md flex items-center justify-center @container"
-              :style="{ ...(trip.route_background_color ? { backgroundColor: trip.route_background_color } : { border: 'solid 0.3em white' })}"
+            <div class="h-full w-full rounded-md flex items-center justify-center @container" v-if="trip.route"
+              :style="{ ...(trip.route_background_color ? { backgroundColor: trip.route_background_color } : { border: 'solid 0.7cqmin white' })}"
             >
-              <span class="text-[8cqh] font-bold" 
+              <span class="text-[30cqmin] font-bold" 
                 :style="{ ...(trip.route_text_color ? { color: trip.route_text_color } : {} )}"
               >{{ trip.route }}</span>
             </div>
@@ -72,12 +72,18 @@ onBeforeUnmount(() => {
             <p class="text-white pl-4 text-[8cqh]">{{ trip.destination }}</p>
           </div>
 
-          <div class="col-span-2 text-center p-2 my-auto">
-            <p class="text-white ">{{ trip.occupancy }}</p>
+          <div class="col-span-2 text-center overflow-hidden my-[2cqh]">
+            <img :src="`/${trip.occupancy.toString()}.svg`" class="w-full h-full object-contain">
           </div>
 
-          <div class="col-span-1 text-right p-2 my-auto">
-            <p class="text-white">{{ trip.due }}</p>
+          <div class="col-span-1 my-auto pr-4 text-right @container relative">
+            <p class="text-white text-[8cqh]">{{ trip.due }}</p>
+            <p class="text-[1.5cqh] absolute bottom-[-5cqmin] right-0 mr-4 p-[0.4cqh] rounded-md"
+              :style="{ 
+                ...(trip.status_background_color ? { backgroundColor: trip.status_background_color } : {}),
+                ...(trip.status_text_color ? { color: trip.status_text_color } : {})
+              }"
+            >{{ trip.status }}</p>
           </div>
         </div>
       </div>
@@ -89,13 +95,13 @@ onBeforeUnmount(() => {
     <!-- /Timetable -->
 
     <!-- Footer -->
-    <div class="bg-[#052849] grid grid-cols-2 absolute bottom-0 h-[3em] w-full">
+    <div class="bg-[#052849] grid grid-cols-2 absolute bottom-0 h-[6cqh] w-full">
       <div class="col-span-1 my-auto pl-2 @container">
-        <p class="text-white text-[2.5cqh]">{{ stopName }}</p>
+        <p class="text-white text-[3cqh]">{{ stopName }}</p>
       </div>
 
       <div class="col-span-1 text-right my-auto pr-2 @container">
-        <p class="text-white text-[2.5cqh]">{{ clockValue }}</p>
+        <p class="text-white text-[3cqh]">{{ clockValue }}</p>
       </div>
     </div>
     <!-- /Footer -->

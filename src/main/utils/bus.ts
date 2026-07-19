@@ -148,11 +148,13 @@ export async function getStopTrips(settingsStore): Promise<TripFull[] | null> {
       trip: db_trip,
       route: db_trip.route?.route_short_name,
       destination: capitalize(stop_time.stop_headsign),
-      occupancy: 0,
+      occupancy: -1,
       arrival_time: arrival_date,
       delay_seconds: 0,
       due: '',
       status: '',
+      status_background_color: null,
+      status_text_color: null,
       route_background_color: '',
       route_text_color: '',
       is_live: false
@@ -177,6 +179,7 @@ export async function getStopTrips(settingsStore): Promise<TripFull[] | null> {
 
   // Filter the collected trips further, and add additional info from live data
   const filtered_trips: TripFull[] = []
+  const now = new Date()
   for (const trip of trips) {
     // Keep filtering trips until the screen fills up
     if (filtered_trips.length < settingsStore.num_trips_to_display) {
@@ -197,20 +200,24 @@ export async function getStopTrips(settingsStore): Promise<TripFull[] | null> {
             entity.vehicle &&
             entity.vehicle.trip &&
             entity.vehicle.trip.tripId === trip.trip?.trip_id &&
-            entity.vehicle.occupancyStatus
+            entity.vehicle.occupancyStatus !== null &&
+            entity.vehicle.occupancyStatus !== undefined
           ) {
             trip.occupancy = entity.vehicle.occupancyStatus
+            break
+          } else {
+            trip.occupancy = -3
           }
         }
       }
 
       // Exclude arrivals before now
-      if (trip.arrival_time < new Date()) {
+      if (trip.arrival_time < now) {
         continue
       }
 
       // Format due
-      const due_delta = trip.arrival_time.getTime() - new Date().getTime()
+      const due_delta = trip.arrival_time.getTime() - now.getTime()
       const seconds_due = due_delta / 1000
       if (-30 < seconds_due && seconds_due < 59) {
         trip.due = 'Now'
@@ -228,23 +235,32 @@ export async function getStopTrips(settingsStore): Promise<TripFull[] | null> {
       const trip_delay_mins = Math.round(trip.delay_seconds / 60)
       if (trip_delay_mins < 0) {
         trip.status = `${-trip_delay_mins} min early`
+        trip.status_background_color = '#00A7E5'
+        trip.status_text_color = '#000000'
       } else if (trip_delay_mins == 0) {
         if (trip.is_live) {
           trip.status = `On Time`
+          trip.status_background_color = '#95C11F'
+          trip.status_text_color = '#000000'
         } else {
           trip.status = 'Scheduled'
+          trip.status_background_color = '#009985'
+          trip.status_text_color = '#FFFFFF'
         }
       } else {
         trip.status = `${trip_delay_mins} min late`
+        trip.status_background_color = '#DE0A2B'
+        trip.status_text_color = '#FFFFFF'
       }
 
       const db_route = await Route.findOne({ where: { route_id: trip.trip?.route_id } })
+      const route_short_name = db_route?.route_short_name ?? ''
       
       // Get route background and text color if present
       // Check if there are color overrides for this route in the config
       let custom_color_used = false
       for (const color_override of settingsStore.color_overrides) {
-        if (color_override.route === db_route!.route_short_name) {
+        if (color_override.route === route_short_name) {
           trip.route_background_color = color_override.background_color
           trip.route_text_color = color_override.text_color
           custom_color_used = true
@@ -263,7 +279,7 @@ export async function getStopTrips(settingsStore): Promise<TripFull[] | null> {
         } 
         
         // If route is frequent with no color set, add one
-        else if (/^\d{2}[A-Za-z]?$/.test(db_route!.route_short_name)) {
+        else if (/^\d{2}[A-Za-z]?$/.test(route_short_name)) {
           trip.route_background_color = '#00A7E5'
           trip.route_text_color = '#001930'
         }
@@ -278,55 +294,57 @@ export async function getStopTrips(settingsStore): Promise<TripFull[] | null> {
       if (use_live_data) {
         for (const entity of feed.entity) {
           if (entity.alert) {
-            // Active period start
-            let active_period_start
-            if (entity.alert.activePeriod && entity.alert.activePeriod[0].start) {
-              active_period_start = new Date(Number(entity.alert.activePeriod[0].start) * 1000)
+            const alert = entity.alert as Record<string, unknown>
+            const active_periods = (alert.activePeriod ?? alert.active_period) as Array<Record<string, unknown>> | undefined
+            const informed_entities = (alert.informedEntity ?? alert.informed_entity) as Array<Record<string, unknown>> | undefined
+            const effect = alert.effect
+            const is_no_service = effect === Effect.NO_SERVICE || effect === 'NO_SERVICE' || effect === 1
+
+            if (!active_periods?.length || !informed_entities?.length || !is_no_service) {
+              continue
             }
 
-            // Active period end
-            let active_period_end
-            if (entity.alert.activePeriod && entity.alert.activePeriod[0].end) {
-              active_period_end = new Date(Number(entity.alert.activePeriod[0].end) * 1000)
+            const active_period = active_periods[0]
+            let active_period_start: Date | undefined
+            if (active_period?.start) {
+              active_period_start = new Date(Number(active_period.start) * 1000)
+            }
+
+            let active_period_end: Date | undefined
+            if (active_period?.end) {
+              active_period_end = new Date(Number(active_period.end) * 1000)
             }
 
             // Check if the arrival time is within the active period
-            if (active_period_start && trip.arrival_time > active_period_start) {
+            if (active_period_start && trip.arrival_time >= active_period_start) {
               if (active_period_end && trip.arrival_time > active_period_end) {
-                break
-              } else {
-                if (entity.alert.informedEntity) {
-                  for (const informed_entity of entity.alert.informedEntity) {
-                    // Check if trip is cancelled because the route or stop is affected
-                    if (
-                      (informed_entity.routeId && informed_entity.routeId === db_route?.route_id) ||
-                      (informed_entity.stopId && informed_entity.stopId === db_stop?.stop_id)
-                    ) {
-                      if (entity.alert.effect === Effect.NO_SERVICE) {
-                        trip.status = 'Cancelled'
-                        trip.is_live = false
-                        break
-                      }
-                    }
+                continue
+              }
 
-                    // Check if trip is cancelled specifically on basis of trip
-                    if (
-                      informed_entity.trip &&
-                      informed_entity.trip.tripId === trip.trip?.trip_id
-                    ) {
-                      if (entity.alert.effect === Effect.NO_SERVICE) {
-                        trip.status = 'Cancelled'
-                        trip.is_live = false
-                        break
-                      }
-                    }
-                  }
+              for (const informed_entity of informed_entities) {
+                const route_id = (informed_entity.routeId ?? informed_entity.route_id) as string | undefined
+                const stop_id = (informed_entity.stopId ?? informed_entity.stop_id) as string | undefined
+                const trip_id = ((informed_entity.trip as Record<string, unknown> | undefined)?.tripId ??
+                  (informed_entity.trip as Record<string, unknown> | undefined)?.trip_id) as string | undefined
+
+                // Check if trip is cancelled because the route or stop is affected
+                if (
+                  (route_id && route_id === db_route?.route_id) ||
+                  (stop_id && stop_id === db_stop?.stop_id) ||
+                  (trip_id && trip_id === trip.trip?.trip_id)
+                ) {
+                  trip.status = 'Cancelled'
+                  trip.status_background_color = '#CA0076'
+                  trip.status_text_color = '#FFFFFF'
+                  trip.is_live = false
+                  break
                 }
               }
             }
           }
         }
       }
+
       // Truncate destination if it's too long
       if (trip.destination && trip.destination?.length > 20) {
         trip.destination = `${trip.destination.slice(0, 20)}...`
@@ -339,5 +357,25 @@ export async function getStopTrips(settingsStore): Promise<TripFull[] | null> {
   }
   // Filter again after accounting for delays
   filtered_trips.sort((a, b) => (a.arrival_time > b.arrival_time ? 1 : -1))
+
+  // If trips list hasn't filled up, add empty dummy entries
+  while (filtered_trips.length < settingsStore.num_trips_to_display) {
+    filtered_trips.push({
+      trip: undefined,
+      route: '',
+      destination: '',
+      occupancy: -1,
+      arrival_time: new Date,
+      delay_seconds: 0,
+      due: '',
+      status: '',
+      status_background_color: null,
+      status_text_color: null,
+      route_background_color: '',
+      route_text_color: '',
+      is_live: false
+    })
+  }
+  
   return filtered_trips
 }

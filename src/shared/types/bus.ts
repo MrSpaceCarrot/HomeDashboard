@@ -9,6 +9,8 @@ export interface TripFull {
   delay_seconds: number
   due: string
   status: string
+  status_background_color: string | null
+  status_text_color: string | null
   route_background_color: string | null
   route_text_color: string | null
   is_live: boolean
