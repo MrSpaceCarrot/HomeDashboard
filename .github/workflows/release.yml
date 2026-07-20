@@ -34,11 +34,6 @@ jobs:
       - name: Build Electron app
         run: npm run build
 
-      - name: Package Electron app
-        run: npm run electron:build
-        env:
-          GH_TOKEN: ${{ secrets.PUBLISH_TOKEN }}
-
       - name: Upload release assets
         uses: softprops/action-gh-release@v2
         with:
