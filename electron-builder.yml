@@ -1,5 +1,5 @@
 appId: com.MrSpaceCarrot.HomeDashboard.app
-productName: homedashboard
+productName: HomeDashboard
 directories:
   buildResources: build
 files:
@@ -35,7 +35,7 @@ linux:
   category: Utility
   icon: build/icons/
 appImage:
-  artifactName: ${name}-${version}.${ext}
+  artifactName: ${name}.${ext}
 npmRebuild: false
 publish:
   provider: generic
