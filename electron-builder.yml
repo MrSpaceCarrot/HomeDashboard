@@ -35,7 +35,7 @@ linux:
   category: Utility
   icon: build/icons/
 appImage:
-  artifactName: ${name}.${ext}
+  artifactName: ${name}-${arch}.${ext}
 npmRebuild: false
 publish:
   provider: generic
