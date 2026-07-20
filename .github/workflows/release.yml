@@ -11,10 +11,15 @@ jobs:
   build:
     strategy:
       matrix:
-        os:
-          - windows-latest
-          - macos-latest
-          - ubuntu-latest
+        include:
+          - os: ubuntu-latest
+            script: build:linux
+
+          - os: windows-latest
+            script: build:win
+
+          - os: macos-latest
+            script: build:mac
 
     runs-on: ${{ matrix.os }}
 
@@ -32,7 +37,9 @@ jobs:
         run: npm ci
 
       - name: Build Electron app
-        run: npm run build
+        run: npm run ${{ matrix.script }}
+        env:
+          GH_TOKEN: ${{ secrets.PUBLISH_TOKEN }}
 
       - name: Upload release assets
         uses: softprops/action-gh-release@v2
