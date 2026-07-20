@@ -7,3 +7,4 @@ out
 /gtfs
 gtfs.zip
 .vscode/*
+/dist/*

@@ -1,10 +1,10 @@
 <script setup lang="ts">
-import { useTripStore } from './stores/tripStore'
+import { useBusStore } from './stores/busStore'
 
-const tripStore = useTripStore()
+const busStore = useBusStore()
 
-window.tripsUpdate.onTripsUpdate((data) => {
-  tripStore.updateTrips(data)
+window.busUpdate.onBusUpdate((data) => {
+  busStore.updateInfo(data)
 })
 
 </script>

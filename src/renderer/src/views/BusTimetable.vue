@@ -1,18 +1,29 @@
 <script setup lang="ts">
 // Imports
 import { ref, onMounted, onBeforeUnmount } from 'vue'
-import { useTripStore } from '@renderer/stores/tripStore'
+import { useBusStore } from '@renderer/stores/busStore'
 
-const tripStore = useTripStore()
+const busStore = useBusStore()
 
 // Variables
 let timer = ref()
 let clockValue = ref('00:00:00')
-let stopName = ref('STOP NAME HERE')
 
 // Functions
 function formatTime(number: number): string {
   return number < 10 ? '0' + number : number.toString()
+}
+
+const images = import.meta.glob(
+  '../assets/**/*.{png,jpg,jpeg,svg,webp}',
+  {
+    eager: true,
+    import: 'default'
+  }
+)
+
+function asset(path: string) {
+  return images[`../assets/${path}`] as string
 }
 
 // On Mounted
@@ -55,8 +66,8 @@ onBeforeUnmount(() => {
     <!-- /Header -->
 
     <!-- Timetable -->
-    <div class="bg-[#001930] absolute top-[6cqh] bottom-[6cqh] w-full grid grid-rows-5">
-      <div v-if="tripStore.trips.length > 0" v-for="trip in tripStore.trips" class="p-0 my-auto h-full">
+    <div v-if="busStore.status === 'Ok'" class="bg-[#001930] absolute top-[6cqh] bottom-[6cqh] w-full grid grid-rows-5">
+      <div v-for="trip in busStore.trips" class="p-0 my-auto h-full">
         <div class="grid grid-cols-7 h-full items-stretch">
           <div class="col-span-1 p-3 text-center">
             <div class="h-full w-full rounded-md flex items-center justify-center @container" v-if="trip.route"
@@ -73,7 +84,7 @@ onBeforeUnmount(() => {
           </div>
 
           <div class="col-span-2 text-center overflow-hidden my-[2cqh]">
-            <img :src="`/${trip.occupancy.toString()}.svg`" class="w-full h-full object-contain">
+            <img :src="asset(`${trip.occupancy.toString()}.svg`)" class="w-full h-full object-contain">
           </div>
 
           <div class="col-span-1 my-auto pr-4 text-right @container relative">
@@ -87,9 +98,11 @@ onBeforeUnmount(() => {
           </div>
         </div>
       </div>
+    </div>
 
-      <div v-else>
-        <p class="text-white text-4xl p-2">Loading</p>
+    <div v-else class="bg-[#001930] absolute top-[6cqh] bottom-[6cqh] w-full">
+      <div class="text-center h-full flex flex-col justify-center items-center">
+        <p class="text-white text-4xl">{{ busStore.status }}</p>
       </div>
     </div>
     <!-- /Timetable -->
@@ -97,7 +110,7 @@ onBeforeUnmount(() => {
     <!-- Footer -->
     <div class="bg-[#052849] grid grid-cols-2 absolute bottom-0 h-[6cqh] w-full">
       <div class="col-span-1 my-auto pl-2 @container">
-        <p class="text-white text-[3cqh]">{{ stopName }}</p>
+        <p class="text-white text-[3cqh]">{{ busStore.stop }}</p>
       </div>
 
       <div class="col-span-1 text-right my-auto pr-2 @container">

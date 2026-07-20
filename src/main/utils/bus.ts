@@ -39,20 +39,10 @@ function GTFSTimeToMs(gtfs_time: string): number {
   return 1000 * seconds + 1000 * 60 * minutes + 1000 * 60 * 60 * hours
 }
 
-// Get stop id from stop code
-export async function getStopIDFromStopCode(stop_code: string): Promise<string | null> {
+// Get stop name from stop code
+export async function getStopNameFromStopCode(stop_code: string): Promise<string | null> {
   const { Stop } = await import('../database/models')
   const db_stop = await Stop.findOne({ where: { stop_code: stop_code } })
-  if (db_stop) {
-    return db_stop?.stop_id
-  }
-  return null
-}
-
-// Get stop name from stop id
-export async function getStopNameFromStopID(stop_id: string): Promise<string | null> {
-  const { Stop } = await import('../database/models')
-  const db_stop = await Stop.findByPk(stop_id)
   if (db_stop) {
     return db_stop?.stop_name
   }
@@ -148,7 +138,7 @@ export async function getStopTrips(settingsStore): Promise<TripFull[] | null> {
       trip: db_trip,
       route: db_trip.route?.route_short_name,
       destination: capitalize(stop_time.stop_headsign),
-      occupancy: -1,
+      occupancy: -3,
       arrival_time: arrival_date,
       delay_seconds: 0,
       due: '',
@@ -346,8 +336,8 @@ export async function getStopTrips(settingsStore): Promise<TripFull[] | null> {
       }
 
       // Truncate destination if it's too long
-      if (trip.destination && trip.destination?.length > 20) {
-        trip.destination = `${trip.destination.slice(0, 20)}...`
+      if (trip.destination && trip.destination?.length > 15) {
+        trip.destination = `${trip.destination.slice(0, 15)}...`
       }
 
       // Remove trip to avoid errors when passing it out of sequelize and add final trip to list

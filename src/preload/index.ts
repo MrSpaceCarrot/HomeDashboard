@@ -11,9 +11,9 @@ if (process.contextIsolated) {
   try {
     contextBridge.exposeInMainWorld('electron', electronAPI)
     contextBridge.exposeInMainWorld('api', api)
-    contextBridge.exposeInMainWorld('tripsUpdate', {
-      onTripsUpdate: (callback: (data: any) => void) => {
-        ipcRenderer.on('trips:update', (_, data) => {
+    contextBridge.exposeInMainWorld('busUpdate', {
+      onBusUpdate: (callback: (data: any) => void) => {
+        ipcRenderer.on('bus:update', (_, data) => {
           callback(data)
         })
       }

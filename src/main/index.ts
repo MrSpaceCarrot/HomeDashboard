@@ -7,6 +7,8 @@ import ingestPath from './workers/ingest?modulePath'
 import tripsPath from './workers/trips?modulePath'
 import { getDatabasePath } from './database/path'
 import { settingsStore } from './settings'
+import { getStopNameFromStopCode } from './utils/bus'
+import { getSequelize, initSequelize, registerModels } from './database/connection'
 
 let mainWindow: BrowserWindow
 let ingestRunning: boolean = false
@@ -53,6 +55,10 @@ async function ingestWorkerLoop(dbPath) {
 // Trips worker task
 // Every 20 seconds, update trips only if ingest isn't running
 async function tripsWorkerLoop(dbPath) {
+  await initSequelize(dbPath)
+  const sequelize = getSequelize()
+  await registerModels(sequelize)
+  
   while (true) {
     if (!ingestRunning) {
       const { port1, port2 } = new MessageChannelMain()
@@ -63,13 +69,22 @@ async function tripsWorkerLoop(dbPath) {
 
       trips_worker.postMessage({ message: 'start', dbPath: dbPath, settingStore: settingsStore.store }, [port1])
       port2.start()
-      port2.on('message', (e) => {
+      port2.on('message', async (e) => {
         if (e.data.type === 'complete') {
-          mainWindow.webContents.send('trips:update', e.data.message)
+          // Send trips and other info to renderer
+          if (e.data.message.length === 0) {
+            mainWindow.webContents.send('bus:update', ['status', 'No trips due'])
+          } else {
+            mainWindow.webContents.send('bus:update', ['trips', e.data.message])
+            mainWindow.webContents.send('bus:update', ['status', 'Ok'])
+          }
+          
+          const stop_name = await getStopNameFromStopCode(settingsStore.get('stop_code'))
+          mainWindow.webContents.send('bus:update', ['stop', `Stop ${settingsStore.get('stop_code')} - ${stop_name}`])
+
         } else {
           console.log(`Trip Update: ${e.data.message}`)
         }
-
       })
 
       await waitForWorkerComplete(port2)
@@ -101,7 +116,8 @@ function createWindow(): void {
       preload: join(__dirname, '../preload/index.cjs'),
       sandbox: false
     },
-    frame: true
+    frame: false,
+    fullscreen: true
   })
 
   mainWindow.on('ready-to-show', () => {
