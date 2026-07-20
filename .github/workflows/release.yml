@@ -15,11 +15,11 @@ jobs:
           - os: ubuntu-latest
             script: build:linux
 
-          - os: windows-latest
-            script: build:win
+          #- os: windows-latest
+          #  script: build:win
 
-          - os: macos-latest
-            script: build:mac
+          #- os: macos-latest
+          #  script: build:mac
 
     runs-on: ${{ matrix.os }}
 
