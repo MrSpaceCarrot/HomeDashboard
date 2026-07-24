@@ -4,6 +4,7 @@ import { Settings } from '@shared/types'
 export const settingsStore = new Store<Settings>({
   defaults: {
     stop_code: '133',
+    stop_codes: ['133'],
     num_trips_to_display: 5,
     time_to_show_mins: 30,
     gtfs_ingest_hour: 21,

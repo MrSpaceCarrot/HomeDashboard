@@ -10,5 +10,6 @@ declare global {
     electron: ElectronAPI
     api: unknown
     busUpdate: any
+    uiUpdate: any
   }
 }

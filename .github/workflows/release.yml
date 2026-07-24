@@ -12,11 +12,11 @@ jobs:
     strategy:
       matrix:
           include:
-          # - os: ubuntu-latest
-          #    script: build:linux:x64
+            - os: ubuntu-latest
+              script: build:linux:x64
 
-          #  - os: ubuntu-24.04-arm
-          #    script: build:linux:arm64
+            - os: ubuntu-24.04-arm
+              script: build:linux:arm64
 
             - os: ubuntu-24.04-arm
               script: build:linux:arm32
@@ -39,14 +39,13 @@ jobs:
           node-version: 22
           cache: npm
 
-      - name: Build
-        uses: addnab/docker-run-action@v3
-        with:
-          image: arm32v7/node:22
-          options: --platform linux/arm/v7
-          run: |
-            npm ci
-            npm run build:linux:armv7l
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build Electron app
+        run: npm run ${{ matrix.script }}
+        env:
+          GH_TOKEN: ${{ secrets.PUBLISH_TOKEN }}
 
       - name: Upload release assets
         uses: softprops/action-gh-release@v2

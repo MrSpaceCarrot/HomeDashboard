@@ -18,6 +18,13 @@ if (process.contextIsolated) {
         })
       }
     })
+
+    contextBridge.exposeInMainWorld('uiUpdate', {
+      uiUpdate: (data: string) => {
+        ipcRenderer.send('uiUpdate', data);
+      }
+    }
+    )
   } catch (error) {
     console.error(error)
   }

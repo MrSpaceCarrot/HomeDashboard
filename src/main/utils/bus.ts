@@ -60,6 +60,9 @@ export async function getStopTrips(settingsStore): Promise<TripFull[] | null> {
   }
   service_date.setHours(0, 0, 0, 0)
 
+  // Keep track of trip indexes
+  let current_index = 0
+
   // Get all stop times at the stop
   // If a stop has children, get times for them as well
   const db_stop = await Stop.findOne({ where: { stop_code: settingsStore.stop_code }, include: { association: 'childStops' }  })
@@ -135,6 +138,7 @@ export async function getStopTrips(settingsStore): Promise<TripFull[] | null> {
     const arrival_delta = GTFSTimeToMs(stop_time.arrival_time)
     const arrival_date = new Date(service_date.getTime() + arrival_delta)
     trips.push({
+      index: undefined,
       trip: db_trip,
       route: db_trip.route?.route_short_name,
       destination: capitalize(stop_time.stop_headsign),
@@ -348,9 +352,16 @@ export async function getStopTrips(settingsStore): Promise<TripFull[] | null> {
   // Filter again after accounting for delays
   filtered_trips.sort((a, b) => (a.arrival_time > b.arrival_time ? 1 : -1))
 
+  // Add indexes after all sorts (to remove gray bar in ui)
+  for (let filtered_trip of filtered_trips) {
+    filtered_trip.index = current_index
+    current_index += 1
+  }
+
   // If trips list hasn't filled up, add empty dummy entries
   while (filtered_trips.length < settingsStore.num_trips_to_display) {
     filtered_trips.push({
+      index: current_index,
       trip: undefined,
       route: '',
       destination: '',
@@ -365,6 +376,7 @@ export async function getStopTrips(settingsStore): Promise<TripFull[] | null> {
       route_text_color: '',
       is_live: false
     })
+    current_index += 1
   }
   
   return filtered_trips

@@ -1,6 +1,6 @@
 <script setup lang="ts">
 // Imports
-import { ref, onMounted, onBeforeUnmount } from 'vue'
+import { ref, onMounted, onBeforeUnmount, onUnmounted } from 'vue'
 import { useBusStore } from '@renderer/stores/busStore'
 
 const busStore = useBusStore()
@@ -26,6 +26,12 @@ function asset(path: string) {
   return images[`../assets/${path}`] as string
 }
 
+function toggleStop(event) {
+  if (event.key === '1') {
+    window.uiUpdate.uiUpdate('togglestop')
+  }
+}
+
 // On Mounted
 onMounted(async () => {
   timer.value = setInterval(() => {
@@ -35,11 +41,16 @@ onMounted(async () => {
     let seconds = formatTime(now.getSeconds())
     clockValue.value = `${hours}:${minutes}:${seconds}`
   }, 1000)
+  window.addEventListener('keydown', toggleStop)
 })
 
 // Clean up
 onBeforeUnmount(() => {
   timer.value = null
+})
+
+onUnmounted(() => {
+  window.removeEventListener('keydown', toggleStop)
 })
 </script>
 
@@ -48,7 +59,7 @@ onBeforeUnmount(() => {
     <!-- Header -->
     <div class="bg-[#052849] grid grid-cols-7 absolute h-[6cqh] w-full">
       <div class="col-span-1 pl-4 my-auto @container">
-        <p class="text-white text-[3cqh]">Route</p>
+        <p class="text-white text-[3cqh]" v-on:keyup.enter="toggleStop">Route</p>
       </div>
 
       <div class="col-span-3 pl-4 my-auto @container">
@@ -67,7 +78,7 @@ onBeforeUnmount(() => {
 
     <!-- Timetable -->
     <div v-if="busStore.status === 'Ok'" class="bg-[#001930] absolute top-[6cqh] bottom-[6cqh] w-full grid grid-rows-5">
-      <div v-for="trip in busStore.trips" class="p-0 my-auto h-full">
+      <div v-for="trip in busStore.trips" class="p-0 my-auto h-full border-solid" :class="{ 'border-t border-gray-600': trip.index !== 0} ">
         <div class="grid grid-cols-7 h-full items-stretch">
           <div class="col-span-1 p-3 text-center">
             <div class="h-full w-full rounded-md flex items-center justify-center @container" v-if="trip.route"
@@ -89,7 +100,7 @@ onBeforeUnmount(() => {
 
           <div class="col-span-1 my-auto pr-4 text-right @container relative">
             <p class="text-white text-[8cqh]">{{ trip.due }}</p>
-            <p class="text-[1.5cqh] absolute bottom-[-5cqmin] right-0 mr-4 p-[0.4cqh] rounded-md"
+            <p class="text-[1.5cqh] absolute bottom-[-7cqmin] right-0 mr-4 p-[0.6cqh] rounded-[3cqmin]"
               :style="{ 
                 ...(trip.status_background_color ? { backgroundColor: trip.status_background_color } : {}),
                 ...(trip.status_text_color ? { color: trip.status_text_color } : {})

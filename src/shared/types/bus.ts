@@ -1,6 +1,7 @@
 import { Trip } from "@main/database/models"
 
 export interface TripFull {
+  index: number | null | undefined
   trip: Trip | null | undefined
   route: string | null
   destination: string | null

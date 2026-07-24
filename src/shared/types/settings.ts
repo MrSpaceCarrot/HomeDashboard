@@ -6,6 +6,7 @@ export interface ColorOverride {
 
 export interface Settings {
   stop_code: string
+  stop_codes: string[]
   num_trips_to_display: number
   time_to_show_mins: number
   gtfs_ingest_hour: number

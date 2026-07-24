@@ -12,6 +12,7 @@ import { getSequelize, initSequelize, registerModels } from './database/connecti
 
 let mainWindow: BrowserWindow
 let ingestRunning: boolean = false
+let tripRefreshController: AbortController | null = null
 
 // Wait for worker to complete before returning
 function waitForWorkerComplete(port) {
@@ -52,6 +53,29 @@ async function ingestWorkerLoop(dbPath) {
   }
 }
 
+// Create promise to wait that can be aborted
+function waitForAbort(ms: number, signal: AbortSignal): Promise<void> {
+  return new Promise((resolve) => {
+    if (signal.aborted) {
+      resolve()
+      return
+    }
+
+    const onAbort = () => {
+      clearTimeout(timer)
+      signal.removeEventListener('abort', onAbort)
+      resolve()
+    }
+
+    const timer = setTimeout(() => {
+      signal.removeEventListener('abort', onAbort)
+      resolve()
+    }, ms)
+
+    signal.addEventListener('abort', onAbort, { once: true })
+  })
+}
+
 // Trips worker task
 // Every 20 seconds, update trips only if ingest isn't running
 async function tripsWorkerLoop(dbPath) {
@@ -72,7 +96,7 @@ async function tripsWorkerLoop(dbPath) {
       port2.on('message', async (e) => {
         if (e.data.type === 'complete') {
           // Send trips and other info to renderer
-          if (e.data.message.length === 0) {
+          if (e.data.message[0].route === '') {
             mainWindow.webContents.send('bus:update', ['status', 'No trips due'])
           } else {
             mainWindow.webContents.send('bus:update', ['trips', e.data.message])
@@ -87,10 +111,14 @@ async function tripsWorkerLoop(dbPath) {
         }
       })
 
-      await waitForWorkerComplete(port2)
+      waitForWorkerComplete(port2)
     }
 
-    await new Promise(resolve => setTimeout(resolve, 20_000));
+    // Wait 20 seconds for next refresh, or earlier if aborted
+    const waitController = new AbortController()
+    tripRefreshController = waitController
+    await waitForAbort(20_000, waitController.signal)
+    tripRefreshController = null
   }
 }
 
@@ -102,6 +130,28 @@ async function initializeApp(): Promise<void> {
   // Setup workers
   ingestWorkerLoop(dbPath)
   tripsWorkerLoop(dbPath)
+
+  ipcMain.on('uiUpdate', (_event, data) => {
+    // Switch stop code if message is sent from ui
+    if (data === 'togglestop') {
+      const stop_code = settingsStore.get('stop_code')
+      const stop_codes = settingsStore.get('stop_codes')
+      for (const code of stop_codes) {
+        if (code === stop_code) {
+          const index = stop_codes.indexOf(code)
+          if (stop_codes[index + 1]) {
+            console.log("Setting stop code to " + stop_codes[index + 1])
+            settingsStore.set('stop_code', stop_codes[index + 1])
+          } else {
+            console.log("Setting stop code to " + stop_codes[0])
+            settingsStore.set('stop_code', stop_codes[0])
+          }
+          mainWindow.webContents.send('bus:update', ['status', 'Loading...'])
+          tripRefreshController?.abort()
+        }
+      }
+    }
+  })
 }
 
 function createWindow(): void {
@@ -117,7 +167,7 @@ function createWindow(): void {
       sandbox: false
     },
     frame: false,
-    fullscreen: true
+    fullscreen: true,
   })
 
   mainWindow.on('ready-to-show', () => {
