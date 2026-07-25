@@ -16,4 +16,7 @@ export interface Settings {
   gtfs_realtime_url: string
   gtfs_realtime_api_key: string
   color_overrides: ColorOverride[]
+  weather_api_key: string
+  weather_lat: number
+  weather_lon: number
 }

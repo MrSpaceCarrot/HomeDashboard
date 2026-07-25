@@ -29,6 +29,9 @@ export const settingsStore = new Store<Settings>({
         background_color: '#00843C',
         text_color: '#001930'
       }
-    ]
-  },
+    ],
+    weather_api_key: '',
+    weather_lat: 0,
+    weather_lon: 0
+  }
 })

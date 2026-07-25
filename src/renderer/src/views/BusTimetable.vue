@@ -2,6 +2,7 @@
 // Imports
 import { ref, onMounted, onBeforeUnmount, onUnmounted } from 'vue'
 import { useBusStore } from '@renderer/stores/busStore'
+import router from '@renderer/router'
 
 const busStore = useBusStore()
 
@@ -26,9 +27,12 @@ function asset(path: string) {
   return images[`../assets/${path}`] as string
 }
 
-function toggleStop(event) {
+function keyPress(event) {
   if (event.key === '1') {
     window.uiUpdate.uiUpdate('togglestop')
+  }
+  if (event.key === '2') {
+    router.push('/Weather')
   }
 }
 
@@ -41,7 +45,7 @@ onMounted(async () => {
     let seconds = formatTime(now.getSeconds())
     clockValue.value = `${hours}:${minutes}:${seconds}`
   }, 1000)
-  window.addEventListener('keydown', toggleStop)
+  window.addEventListener('keydown', keyPress)
 })
 
 // Clean up
@@ -50,7 +54,7 @@ onBeforeUnmount(() => {
 })
 
 onUnmounted(() => {
-  window.removeEventListener('keydown', toggleStop)
+  window.removeEventListener('keydown', keyPress)
 })
 </script>
 
@@ -59,7 +63,7 @@ onUnmounted(() => {
     <!-- Header -->
     <div class="bg-[#052849] grid grid-cols-7 absolute h-[6cqh] w-full">
       <div class="col-span-1 pl-4 my-auto @container">
-        <p class="text-white text-[3cqh]" v-on:keyup.enter="toggleStop">Route</p>
+        <p class="text-white text-[3cqh]">Route</p>
       </div>
 
       <div class="col-span-3 pl-4 my-auto @container">

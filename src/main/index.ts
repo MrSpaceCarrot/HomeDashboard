@@ -5,6 +5,7 @@ import { electronApp, optimizer, is } from '@electron-toolkit/utils'
 import icon from '../../resources/icon.png?asset'
 import ingestPath from './workers/ingest?modulePath'
 import tripsPath from './workers/trips?modulePath'
+import weatherPath from './workers/weather?modulePath'
 import { getDatabasePath } from './database/path'
 import { settingsStore } from './settings'
 import { getStopNameFromStopCode } from './utils/bus'
@@ -23,34 +24,6 @@ function waitForWorkerComplete(port) {
       }
     })
   })
-}
-
-// Ingest worker task
-// Every 60 seconds, check if the daily gtfs ingest time has been reached, then update the db
-async function ingestWorkerLoop(dbPath) {
-  while (true) {
-    const now = new Date()
-    if (settingsStore.get('gtfs_skip_ingest') === false && ((now.getHours() === settingsStore.get('gtfs_ingest_hour') && now.getMinutes() === 0) || !fs.existsSync(dbPath))) {
-      ingestRunning = true
-      
-      const { port1, port2 } = new MessageChannelMain()
-      const ingest_worker = utilityProcess.fork(ingestPath, [], {stdio: 'pipe'})
-
-      ingest_worker.stdout?.on('data', (data) => { console.log('WORKER STDOUT:', data.toString()) }) 
-      ingest_worker.stderr?.on('data', (data) => { console.error('WORKER STDERR:', data.toString()) })
-
-      ingest_worker.postMessage({ message: 'start', dbPath: dbPath, settingStore: settingsStore.store }, [port1])
-      port2.start()
-      port2.on('message', (e) => {
-        console.log(`GTFS Ingest: ${e.data.message}`)
-      })
-
-      await waitForWorkerComplete(port2)
-      ingestRunning = false
-    }
-
-    await new Promise(resolve => setTimeout(resolve, 60_000));
-  }
 }
 
 // Create promise to wait that can be aborted
@@ -74,6 +47,34 @@ function waitForAbort(ms: number, signal: AbortSignal): Promise<void> {
 
     signal.addEventListener('abort', onAbort, { once: true })
   })
+}
+
+// Ingest worker task
+// Every 60 seconds, check if the daily gtfs ingest time has been reached, then update the db
+async function ingestWorkerLoop(dbPath) {
+  while (true) {
+    const now = new Date()
+    if (settingsStore.get('gtfs_skip_ingest') === false && ((now.getHours() === settingsStore.get('gtfs_ingest_hour') && now.getMinutes() === 0) || !fs.existsSync(dbPath))) {
+      ingestRunning = true
+      
+      const { port1, port2 } = new MessageChannelMain()
+      const ingest_worker = utilityProcess.fork(ingestPath, [], {stdio: 'pipe'})
+
+      ingest_worker.stdout?.on('data', (data) => { console.log(data.toString()) }) 
+      ingest_worker.stderr?.on('data', (data) => { console.error(data.toString()) })
+
+      ingest_worker.postMessage({ message: 'start', dbPath: dbPath, settingStore: settingsStore.store }, [port1])
+      port2.start()
+      port2.on('message', (e) => {
+        console.log(`GTFS Ingest: ${e.data.message}`)
+      })
+
+      await waitForWorkerComplete(port2)
+      ingestRunning = false
+    }
+
+    await new Promise(resolve => setTimeout(resolve, 60_000));
+  }
 }
 
 // Trips worker task
@@ -122,6 +123,23 @@ async function tripsWorkerLoop(dbPath) {
   }
 }
 
+// Weather worker task
+// Every 5 mins, update weather info
+async function weatherWorkerLoop() {
+      
+  const { port1, port2 } = new MessageChannelMain()
+  const weather_worker = utilityProcess.fork(weatherPath, [], {stdio: 'pipe'})
+
+  weather_worker.stdout?.on('data', (data) => { console.log(data.toString()) }) 
+  weather_worker.stderr?.on('data', (data) => { console.error(data.toString()) })
+
+  weather_worker.postMessage({ message: 'start', settingStore: settingsStore.store }, [port1])
+  port2.start()
+  port2.on('message', (e) => {
+    console.log(`Weather: ${e.data.message}`)
+  })
+}
+
 async function initializeApp(): Promise<void> {
   createWindow()
 
@@ -130,6 +148,7 @@ async function initializeApp(): Promise<void> {
   // Setup workers
   ingestWorkerLoop(dbPath)
   tripsWorkerLoop(dbPath)
+  weatherWorkerLoop()
 
   ipcMain.on('uiUpdate', (_event, data) => {
     // Switch stop code if message is sent from ui
